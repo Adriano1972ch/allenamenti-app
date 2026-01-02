@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Allenamenti</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ================= AUTH ================= -->
+<div id="auth">
+  <h2>Login / Registrazione</h2>
+
+  <input id="email" type="email" placeholder="Email">
+  <input id="password" type="password" placeholder="Password">
+
+  <button id="loginBtn">Login</button>
+  <button id="registerBtn">Registrati</button>
+</div>
+
+<!-- ================= APP ================= -->
+<div id="app" style="display:none">
+
+  <button id="logoutBtn">Logout</button>
+
+  <!-- FORM -->
+  <h2>Nuovo allenamento</h2>
+  <form id="form">
+    <input id="tipo" placeholder="Tipo allenamento" required>
+    <input id="data" type="date" required>
+    <input id="ora_inizio" type="time" required>
+    <input id="durata" type="number" placeholder="Durata (min)">
+    <input id="numero_partecipanti" type="number" placeholder="Partecipanti">
+    <input id="persone" placeholder="Con chi">
+    <textarea id="note" placeholder="Note"></textarea>
+    <button type="submit">➕ Aggiungi</button>
+  </form>
+
+  <!-- CALENDARIO -->
+  <h2>Calendario</h2>
+  <div id="calendar">
+    <div class="calendar-header">
+      <button id="prevMonth">‹</button>
+      <span id="calendarTitle"></span>
+      <button id="nextMonth">›</button>
+    </div>
+
+    <div class="calendar-weekdays">
+      <div>L</div><div>M</div><div>M</div><div>G</div><div>V</div><div>S</div><div>D</div>
+    </div>
+
+    <div id="calendar-grid"></div>
+  </div>
+
+  <!-- LISTA -->
+  <h2 id="lista-title">Allenamenti</h2>
+  <div id="lista"></div>
+
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
