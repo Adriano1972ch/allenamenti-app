@@ -69,17 +69,23 @@
   <h2 id="lista-title">Allenamenti</h2>
   <div id="lista"></div>
 
+  <button id="exportExcelBtn">
+    📊 Esporta in Excel
+  </button>
+
 </div>
 
 <script src="app.js"></script>
 
-<!-- ✅ INCOLLA QUI (SERVICE WORKER) -->
+<!-- ✅ SERVICE WORKER -->
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js');
   }
 </script>
-<!-- ✅ FINE -->
+
+<!-- Libreria Excel -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 
 </body>
 </html>
