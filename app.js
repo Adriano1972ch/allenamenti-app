@@ -105,11 +105,16 @@ async function caricaAllenamentiMese() {
 
   const { data, error } = await supabaseClient
     .from("allenamenti")
-    .select("*")
+    .select("*, profiles(full_name)")
     .gte("data", start.toISOString().split("T")[0])
     .lte("data", end.toISOString().split("T")[0]);
 
-  if (error) return console.error(error);
+  if (error) {
+    console.error(error);
+    allenamentiMese = [];
+    renderCalendar();
+    return;
+  }
 
   allenamentiMese = data || [];
   renderCalendar();
@@ -175,11 +180,15 @@ nextMonthBtn.onclick = () => {
 async function caricaAllenamenti(data) {
   const { data: rows, error } = await supabaseClient
     .from("allenamenti")
-    .select("*")
+    .select("*, profiles(full_name)")
     .eq("data", data)
     .order("ora_inizio");
 
-  if (error) return console.error(error);
+  if (error) {
+    console.error(error);
+    listaDiv.innerHTML = "<p>Errore caricamento (permessi)</p>";
+    return;
+  }
 
   listaDiv.innerHTML = "";
   if (!rows || rows.length === 0) {
@@ -194,6 +203,7 @@ async function caricaAllenamenti(data) {
         <div>📅 <strong>Data:</strong> ${formatDate(a.data)}</div>
         <div>⏰ <strong>Ora:</strong> ${a.ora_inizio}</div>
         <div>🏋️ <strong>Tipo:</strong> ${a.tipo}</div>
+        <div>👤 <strong>Inserito da:</strong> ${a.profiles?.full_name || "-"}</div>
 
         <div>🤝 <strong>Trainer:</strong> ${a.persone || "-"}</div>
         <div>👥 <strong>Partecipanti:</strong> ${a.numero_partecipanti || "-"}</div>
@@ -272,11 +282,7 @@ window.eliminaAllenamento = async function (id) {
 // EXPORT EXCEL
 // ===============================
 //
-// NOTE:
-// - In index.html esiste solo il bottone #exportExcelBtn (nessun exportType/startDate/endDate).
-// - La tabella corretta è "allenamenti" e il client è supabaseClient.
-//
-// Comportamento scelto:
+// Comportamento:
 // - Se hai selezionato un giorno nel calendario: esporta quel giorno.
 // - Altrimenti: esporta tutto il mese attualmente visualizzato nel calendario.
 
@@ -295,9 +301,10 @@ exportBtn?.addEventListener("click", async () => {
     const fromDate = giornoSelezionato || start;
     const toDate = giornoSelezionato || end;
 
+    // 🔒 RLS: utente normale vedrà solo i suoi; admin vedrà tutti
     const { data: rows, error } = await supabaseClient
       .from("allenamenti")
-      .select("*")
+      .select("*, profiles(full_name)")
       .gte("data", fromDate)
       .lte("data", toDate)
       .order("data", { ascending: true })
@@ -327,7 +334,6 @@ function exportAllenamentiToExcel(rows, { fromDate, toDate }) {
     return;
   }
 
-  // Ordine colonne + intestazioni
   const formatted = rows.map((a) => ({
     Data: a.data ? formatDate(a.data) : "",
     Ora: a.ora_inizio || "",
@@ -336,6 +342,7 @@ function exportAllenamentiToExcel(rows, { fromDate, toDate }) {
     Partecipanti: a.numero_partecipanti ?? "",
     Trainer: a.persone ?? "",
     Note: a.note ?? "",
+    Inserito_da: a.profiles?.full_name ?? "",
     ID: a.id ?? ""
   }));
 
@@ -354,6 +361,7 @@ function exportAllenamentiToExcel(rows, { fromDate, toDate }) {
 
   const safeFrom = fromDate.replaceAll("-", "");
   const safeTo = toDate.replaceAll("-", "");
+
   const fileName = giornoSelezionato
     ? `allenamenti_${safeFrom}.xlsx`
     : `allenamenti_${safeFrom}_${safeTo}.xlsx`;
