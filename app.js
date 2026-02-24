@@ -268,3 +268,95 @@ window.eliminaAllenamento = async function (id) {
   caricaAllenamentiMese();
   if (giornoSelezionato) caricaAllenamenti(giornoSelezionato);
 };
+// ===============================
+// EXPORT EXCEL
+// ===============================
+//
+// NOTE:
+// - In index.html esiste solo il bottone #exportExcelBtn (nessun exportType/startDate/endDate).
+// - La tabella corretta è "allenamenti" e il client è supabaseClient.
+//
+// Comportamento scelto:
+// - Se hai selezionato un giorno nel calendario: esporta quel giorno.
+// - Altrimenti: esporta tutto il mese attualmente visualizzato nel calendario.
+
+const exportBtn = document.getElementById("exportExcelBtn");
+
+exportBtn?.addEventListener("click", async () => {
+  try {
+    // Se non è selezionato un giorno, esportiamo il mese corrente
+    const start = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1)
+      .toISOString()
+      .split("T")[0];
+    const end = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0)
+      .toISOString()
+      .split("T")[0];
+
+    const fromDate = giornoSelezionato || start;
+    const toDate = giornoSelezionato || end;
+
+    const { data: rows, error } = await supabaseClient
+      .from("allenamenti")
+      .select("*")
+      .gte("data", fromDate)
+      .lte("data", toDate)
+      .order("data", { ascending: true })
+      .order("ora_inizio", { ascending: true });
+
+    if (error) {
+      console.error(error);
+      alert("Errore durante l'export");
+      return;
+    }
+
+    if (!rows || rows.length === 0) {
+      alert("Nessun dato da esportare");
+      return;
+    }
+
+    exportAllenamentiToExcel(rows, { fromDate, toDate });
+  } catch (err) {
+    console.error(err);
+    alert("Errore imprevisto durante l'export");
+  }
+});
+
+function exportAllenamentiToExcel(rows, { fromDate, toDate }) {
+  if (typeof XLSX === "undefined") {
+    alert("Libreria XLSX non caricata. Controlla lo script in index.html.");
+    return;
+  }
+
+  // Ordine colonne + intestazioni
+  const formatted = rows.map((a) => ({
+    Data: a.data ? formatDate(a.data) : "",
+    Ora: a.ora_inizio || "",
+    Tipo: a.tipo || "",
+    Durata_min: a.durata ?? "",
+    Partecipanti: a.numero_partecipanti ?? "",
+    Trainer: a.persone ?? "",
+    Note: a.note ?? "",
+    ID: a.id ?? ""
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(formatted);
+
+  // Auto-width semplice
+  const headers = Object.keys(formatted[0] || {});
+  ws["!cols"] = headers.map((h) => {
+    const maxLen = Math.max(h.length, ...formatted.map((r) => String(r[h] ?? "").length));
+    return { wch: Math.min(Math.max(maxLen + 2, 10), 40) };
+  });
+
+  const wb = XLSX.utils.book_new();
+  const sheetName = giornoSelezionato ? "Giorno" : "Mese";
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+
+  const safeFrom = fromDate.replaceAll("-", "");
+  const safeTo = toDate.replaceAll("-", "");
+  const fileName = giornoSelezionato
+    ? `allenamenti_${safeFrom}.xlsx`
+    : `allenamenti_${safeFrom}_${safeTo}.xlsx`;
+
+  XLSX.writeFile(wb, fileName);
+}
