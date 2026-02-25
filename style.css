@@ -178,20 +178,30 @@ button {
 
 
 
-/* ===== ADMIN FILTERS ===== */
-.admin-filters{
-  margin: 12px 0 16px;
+/* Admin filter */
+.admin-filter{
+  margin: 10px 0 20px;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
   display: flex;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
 }
-.admin-filters label{
-  width: auto;
-  margin: 0;
-  font-weight: 600;
+.admin-filter select{
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
 }
-.admin-filters select{
-  width: auto;
-  flex: 1;
-  margin: 0;
+
+/* Labels for date/time (mobile-friendly) */
+.field{
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.field label{
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #333;
 }
