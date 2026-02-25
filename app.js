@@ -11,6 +11,7 @@ const appDiv = document.getElementById("app");
 const listaDiv = document.getElementById("lista");
 const listaTitle = document.getElementById("lista-title");
 
+const fullNameInput = document.getElementById("full_name"); // opzionale
 const emailInput = document.getElementById("email");
 const passwordInput = document.getElementById("password");
 
@@ -26,10 +27,11 @@ const note = document.getElementById("note");
 const prevMonthBtn = document.getElementById("prevMonth");
 const nextMonthBtn = document.getElementById("nextMonth");
 
-const adminFilterWrap = document.getElementById("adminUserFilter");
-const userFilterSelect = document.getElementById("userFilter");
-
 const exportBtn = document.getElementById("exportExcelBtn");
+
+// Admin filter (opzionale: se non c'è, l'app funziona uguale)
+const userFilterSelect = document.getElementById("userFilter"); // <select>
+const userFilterWrap = document.getElementById("userFilterWrap"); // opzionale container
 
 // ================= STATE =================
 let currentMonth = new Date();
@@ -39,11 +41,8 @@ let giornoSelezionato = null;
 let currentUser = null;
 let isAdmin = false;
 
-// admin: "all" or specific uuid
-let selectedUserFilter = "all";
-
-// map uuid -> full name
-let profilesMap = {};
+// "__all__" = nessun filtro (tutti)
+let selectedUserId = "__all__";
 
 // ================= UTILS =================
 function formatDate(dateStr) {
@@ -55,9 +54,41 @@ function isoDate(d) {
   return d.toISOString().split("T")[0];
 }
 
-function safeNameFromId(id) {
-  if (!id) return "—";
-  return id.slice(0, 8);
+async function getIsAdmin() {
+  if (!currentUser) return false;
+  const { data, error } = await supabaseClient
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", currentUser.id)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Errore lettura ruolo:", error);
+    return false;
+  }
+  return data?.role === "admin";
+}
+
+// Enrich senza dipendere dalla FK/embedded select
+async function enrichWithProfiles(rows) {
+  const ids = Array.from(new Set((rows || []).map((r) => r.user_id).filter(Boolean)));
+  if (ids.length === 0) return rows || [];
+
+  const { data: profs, error } = await supabaseClient
+    .from("profiles")
+    .select("id, full_name")
+    .in("id", ids);
+
+  if (error) {
+    console.error("Errore lettura profiles:", error);
+    return rows || [];
+  }
+
+  const map = new Map((profs || []).map((p) => [p.id, p.full_name]));
+  return (rows || []).map((r) => ({
+    ...r,
+    _full_name: map.get(r.user_id) || null
+  }));
 }
 
 // ================= AUTH =================
@@ -67,14 +98,22 @@ document.getElementById("loginBtn").onclick = async () => {
     password: passwordInput.value
   });
   if (error) alert(error.message);
-  else checkSession();
+  else await checkSession();
 };
 
 document.getElementById("registerBtn").onclick = async () => {
+  const full_name = fullNameInput ? (fullNameInput.value || "").trim() : "";
+
   const { error } = await supabaseClient.auth.signUp({
     email: emailInput.value,
-    password: passwordInput.value
+    password: passwordInput.value,
+    options: {
+      data: {
+        full_name
+      }
+    }
   });
+
   if (error) alert(error.message);
   else alert("Registrazione completata");
 };
@@ -82,18 +121,20 @@ document.getElementById("registerBtn").onclick = async () => {
 document.getElementById("logoutBtn").onclick = async () => {
   await supabaseClient.auth.signOut();
 
-  // ✅ pulizia UI/dati (evita che restino dati vecchi)
-  allenamentiMese = [];
-  giornoSelezionato = null;
-  listaDiv.innerHTML = "";
-  listaTitle.textContent = "Allenamenti";
-  profilesMap = {};
+  // ✅ pulizia UI / state
   currentUser = null;
   isAdmin = false;
-  selectedUserFilter = "all";
+  selectedUserId = "__all__";
 
-  if (adminFilterWrap) adminFilterWrap.style.display = "none";
-  if (userFilterSelect) userFilterSelect.value = "all";
+  allenamentiMese = [];
+  giornoSelezionato = null;
+
+  if (listaDiv) listaDiv.innerHTML = "";
+  if (listaTitle) listaTitle.textContent = "Allenamenti";
+
+  // (opzionale) reset filtro
+  if (userFilterSelect) userFilterSelect.value = "__all__";
+  if (userFilterWrap) userFilterWrap.style.display = "none";
 
   authDiv.style.display = "block";
   appDiv.style.display = "none";
@@ -101,88 +142,78 @@ document.getElementById("logoutBtn").onclick = async () => {
 
 async function checkSession() {
   const { data: { session } } = await supabaseClient.auth.getSession();
-  if (session) {
-    authDiv.style.display = "none";
-    appDiv.style.display = "block";
 
-    await initUserContext();
-    await caricaAllenamentiMese();
-  } else {
+  if (!session) {
     authDiv.style.display = "block";
     appDiv.style.display = "none";
+    return;
   }
+
+  currentUser = session.user;
+  isAdmin = await getIsAdmin();
+
+  authDiv.style.display = "none";
+  appDiv.style.display = "block";
+
+  // Admin: prepara dropdown utenti se presente
+  if (userFilterSelect) {
+    if (isAdmin) {
+      if (userFilterWrap) userFilterWrap.style.display = "block";
+
+      await populateUserFilter();
+      userFilterSelect.onchange = async () => {
+        selectedUserId = userFilterSelect.value || "__all__";
+        // reset vista giorno quando cambi filtro (più chiaro)
+        giornoSelezionato = null;
+        if (listaDiv) listaDiv.innerHTML = "";
+        if (listaTitle) listaTitle.textContent = "Allenamenti";
+        await caricaAllenamentiMese();
+      };
+    } else {
+      // Non-admin: nascondi filtro se esiste
+      if (userFilterWrap) userFilterWrap.style.display = "none";
+      userFilterSelect.innerHTML = "";
+    }
+  }
+
+  await caricaAllenamentiMese();
 }
 checkSession();
 
-// ================= USER CONTEXT (admin + profiles) =================
-async function initUserContext() {
-  const { data: ures, error: uerr } = await supabaseClient.auth.getUser();
-  if (uerr) {
-    console.error(uerr);
-    currentUser = null;
-    isAdmin = false;
+async function populateUserFilter() {
+  if (!userFilterSelect) return;
+
+  const { data, error } = await supabaseClient
+    .from("profiles")
+    .select("id, full_name")
+    .order("full_name", { ascending: true });
+
+  if (error) {
+    console.error("Errore caricamento utenti:", error);
+    // fallback: almeno "Tutti"
+    userFilterSelect.innerHTML = `<option value="__all__">Tutti</option>`;
+    selectedUserId = "__all__";
     return;
   }
-  currentUser = ures?.user || null;
 
-  // ruolo: leggiamo solo il nostro (RLS)
-  isAdmin = false;
-  if (currentUser) {
-    const { data: roleRow, error: roleErr } = await supabaseClient
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", currentUser.id)
-      .maybeSingle();
+  const options = [];
+  options.push(`<option value="__all__">Tutti</option>`);
 
-    if (roleErr) {
-      // se non esiste tabella/permessi, rimane false
-      console.warn("Impossibile leggere user_roles:", roleErr.message);
-    } else {
-      isAdmin = roleRow?.role === "admin";
-    }
+  // opzionale: mostra anche "Admin (solo miei)" come scelta rapida
+  if (currentUser?.id) {
+    options.push(`<option value="${currentUser.id}">Admin</option>`);
   }
 
-  // carica lista utenti (profiles) per filtro admin
-  profilesMap = {};
-  if (isAdmin && adminFilterWrap && userFilterSelect) {
-    adminFilterWrap.style.display = "flex";
+  (data || []).forEach((p) => {
+    const label = p.full_name || "(senza nome)";
+    options.push(`<option value="${p.id}">${label}</option>`);
+  });
 
-    const { data: profs, error: profErr } = await supabaseClient
-      .from("profiles")
-      .select("id, full_name")
-      .order("full_name", { ascending: true });
+  userFilterSelect.innerHTML = options.join("\n");
 
-    if (profErr) {
-      console.error("Errore lettura profiles:", profErr);
-      // fallback: nascondi filtro se non possiamo leggere i profili
-      adminFilterWrap.style.display = "none";
-      isAdmin = false;
-      return;
-    }
-
-    // mappa e riempi select
-    profilesMap = {};
-    userFilterSelect.innerHTML = `<option value="all">Tutti</option>`;
-
-    (profs || []).forEach(p => {
-      profilesMap[p.id] = p.full_name || safeNameFromId(p.id);
-      const opt = document.createElement("option");
-      opt.value = p.id;
-      opt.textContent = profilesMap[p.id];
-      userFilterSelect.appendChild(opt);
-    });
-
-    userFilterSelect.onchange = async () => {
-      selectedUserFilter = userFilterSelect.value || "all";
-      // reset giorno selezionato e ricarica
-      giornoSelezionato = null;
-      listaDiv.innerHTML = "";
-      listaTitle.textContent = "Allenamenti";
-      await caricaAllenamentiMese();
-    };
-  } else {
-    if (adminFilterWrap) adminFilterWrap.style.display = "none";
-  }
+  // default: tutti
+  selectedUserId = "__all__";
+  userFilterSelect.value = "__all__";
 }
 
 // ================= INSERIMENTO =================
@@ -197,7 +228,7 @@ form.onsubmit = async (e) => {
     numero_partecipanti: numero_partecipanti.value || null,
     persone: persone.value || null,
     note: note.value || null
-    // user_id: lo mette il DB con default auth.uid()
+    // user_id: non lo passiamo, lo mette il DB con default auth.uid()
   };
 
   const { error } = await supabaseClient
@@ -216,18 +247,18 @@ async function caricaAllenamentiMese() {
   const start = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
   const end = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
 
-  let q = supabaseClient
+  // Provo embedded select (se hai FK), ma non ci conto: faccio enrich dopo
+  let query = supabaseClient
     .from("allenamenti")
-    .select("id,data,user_id") // sufficiente per il calendario
+    .select("*, profiles(full_name)")
     .gte("data", isoDate(start))
     .lte("data", isoDate(end));
 
-  // filtro admin
-  if (isAdmin && selectedUserFilter !== "all") {
-    q = q.eq("user_id", selectedUserFilter);
+  if (isAdmin && selectedUserId && selectedUserId !== "__all__") {
+    query = query.eq("user_id", selectedUserId);
   }
 
-  const { data, error } = await q;
+  const { data, error } = await query;
 
   if (error) {
     console.error(error);
@@ -236,13 +267,16 @@ async function caricaAllenamentiMese() {
     return;
   }
 
-  allenamentiMese = data || [];
+  // Enrich robusto (anche se profiles non viene embedded)
+  allenamentiMese = await enrichWithProfiles(data || []);
   renderCalendar();
 }
 
 function renderCalendar() {
   const grid = document.getElementById("calendar-grid");
   const title = document.getElementById("calendarTitle");
+  if (!grid || !title) return;
+
   grid.innerHTML = "";
 
   title.textContent = currentMonth.toLocaleDateString("it-IT", {
@@ -282,16 +316,7 @@ function renderCalendar() {
 
 window.selezionaGiorno = function (data) {
   giornoSelezionato = data;
-
-  if (isAdmin && selectedUserFilter !== "all") {
-    const name = profilesMap[selectedUserFilter] || safeNameFromId(selectedUserFilter);
-    listaTitle.textContent = `Allenamenti di ${name} — ${formatDate(data)}`;
-  } else if (isAdmin && selectedUserFilter === "all") {
-    listaTitle.textContent = `Allenamenti (Tutti) — ${formatDate(data)}`;
-  } else {
-    listaTitle.textContent = `Allenamenti del ${formatDate(data)}`;
-  }
-
+  listaTitle.textContent = `Allenamenti del ${formatDate(data)}`;
   caricaAllenamenti(data);
 };
 
@@ -307,17 +332,17 @@ nextMonthBtn.onclick = () => {
 
 // ================= LISTA (CARD MOBILE) =================
 async function caricaAllenamenti(data) {
-  let q = supabaseClient
+  let query = supabaseClient
     .from("allenamenti")
-    .select("*")
+    .select("*, profiles(full_name)")
     .eq("data", data)
     .order("ora_inizio");
 
-  if (isAdmin && selectedUserFilter !== "all") {
-    q = q.eq("user_id", selectedUserFilter);
+  if (isAdmin && selectedUserId && selectedUserId !== "__all__") {
+    query = query.eq("user_id", selectedUserId);
   }
 
-  const { data: rows, error } = await q;
+  const { data: rows, error } = await query;
 
   if (error) {
     console.error(error);
@@ -325,21 +350,20 @@ async function caricaAllenamenti(data) {
     return;
   }
 
+  const enriched = await enrichWithProfiles(rows || []);
+
   listaDiv.innerHTML = "";
-  if (!rows || rows.length === 0) {
+  if (!enriched || enriched.length === 0) {
     listaDiv.innerHTML = "<p>Nessun allenamento</p>";
     return;
   }
 
-  rows.forEach(a => {
-    const who = profilesMap[a.user_id] || (isAdmin ? safeNameFromId(a.user_id) : "");
-    const whoLine = isAdmin
-      ? `<div>👤 <strong>Utente:</strong> ${who}</div>`
-      : "";
+  enriched.forEach(a => {
+    const who = (a.profiles?.full_name || a._full_name || "-");
 
     listaDiv.innerHTML += `
       <div class="table-row">
-        ${whoLine}
+
         <div>📅 <strong>Data:</strong> ${formatDate(a.data)}</div>
         <div>⏰ <strong>Ora:</strong> ${a.ora_inizio}</div>
         <div>🏋️ <strong>Tipo:</strong> ${a.tipo}</div>
@@ -348,12 +372,15 @@ async function caricaAllenamenti(data) {
         <div>👥 <strong>Partecipanti:</strong> ${a.numero_partecipanti || "-"}</div>
         <div>⏱ <strong>Durata:</strong> ${a.durata ? a.durata + " min" : "-"}</div>
 
+        ${isAdmin ? `<div>👤 <strong>Inserito da:</strong> ${who}</div>` : ""}
+
         <div>📝 <strong>Note:</strong> ${a.note || "-"}</div>
 
         <div class="actions">
           <button onclick="modificaAllenamento('${a.id}')">✏️</button>
           <button onclick="eliminaAllenamento('${a.id}')">🗑️</button>
         </div>
+
       </div>
     `;
   });
@@ -367,39 +394,41 @@ window.modificaAllenamento = async function (id) {
     .eq("id", id)
     .single();
 
-  if (error) return alert(error.message);
-  if (!a) return;
+  if (error || !a) return;
 
-  const tipoVal = prompt("Tipo:", a.tipo);
-  if (tipoVal === null) return;
+  const newTipo = prompt("Tipo:", a.tipo);
+  if (newTipo === null) return;
 
-  const dataVal = prompt("Data (YYYY-MM-DD):", a.data);
-  if (dataVal === null) return;
+  const newData = prompt("Data (YYYY-MM-DD):", a.data);
+  if (newData === null) return;
 
-  const oraVal = prompt("Ora:", a.ora_inizio);
-  if (oraVal === null) return;
+  const newOra = prompt("Ora:", a.ora_inizio);
+  if (newOra === null) return;
 
-  const durataVal = prompt("Durata (min):", a.durata ?? "");
-  if (durataVal === null) return;
+  const newDurata = prompt("Durata (min):", a.durata ?? "");
+  if (newDurata === null) return;
 
-  const partecipantiVal = prompt("Partecipanti:", a.numero_partecipanti ?? "");
-  if (partecipantiVal === null) return;
+  const newPartecipanti = prompt("Partecipanti:", a.numero_partecipanti ?? "");
+  if (newPartecipanti === null) return;
 
-  const trainerVal = prompt("Trainer:", a.persone ?? "");
-  if (trainerVal === null) return;
+  const newTrainer = prompt("Trainer:", a.persone ?? "");
+  if (newTrainer === null) return;
 
-  const noteVal = prompt("Note:", a.note ?? "");
-  if (noteVal === null) return;
+  const newNote = prompt("Note:", a.note ?? "");
+  if (newNote === null) return;
 
-  const { error: upErr } = await supabaseClient.from("allenamenti").update({
-    tipo: tipoVal,
-    data: dataVal,
-    ora_inizio: oraVal,
-    durata: durataVal || null,
-    numero_partecipanti: partecipantiVal || null,
-    persone: trainerVal || null,
-    note: noteVal || null
-  }).eq("id", id);
+  const { error: upErr } = await supabaseClient
+    .from("allenamenti")
+    .update({
+      tipo: newTipo,
+      data: newData,
+      ora_inizio: newOra,
+      durata: newDurata || null,
+      numero_partecipanti: newPartecipanti || null,
+      persone: newTrainer || null,
+      note: newNote || null
+    })
+    .eq("id", id);
 
   if (upErr) alert(upErr.message);
 
@@ -427,13 +456,13 @@ window.eliminaAllenamento = async function (id) {
 // ===============================
 exportBtn?.addEventListener("click", async () => {
   try {
-    const start = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
-    const end = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
+    const monthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+    const monthEnd = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
 
-    const fromDate = giornoSelezionato || isoDate(start);
-    const toDate = giornoSelezionato || isoDate(end);
+    const fromDate = giornoSelezionato || isoDate(monthStart);
+    const toDate = giornoSelezionato || isoDate(monthEnd);
 
-    let q = supabaseClient
+    let query = supabaseClient
       .from("allenamenti")
       .select("*")
       .gte("data", fromDate)
@@ -441,24 +470,25 @@ exportBtn?.addEventListener("click", async () => {
       .order("data", { ascending: true })
       .order("ora_inizio", { ascending: true });
 
-    if (isAdmin && selectedUserFilter !== "all") {
-      q = q.eq("user_id", selectedUserFilter);
+    if (isAdmin && selectedUserId && selectedUserId !== "__all__") {
+      query = query.eq("user_id", selectedUserId);
     }
 
-    const { data: rows, error } = await q;
+    const { data: rows, error } = await query;
 
     if (error) {
       console.error(error);
       alert("Errore durante l'export");
       return;
     }
-
     if (!rows || rows.length === 0) {
       alert("Nessun dato da esportare");
       return;
     }
 
-    exportAllenamentiToExcel(rows, { fromDate, toDate });
+    const enriched = await enrichWithProfiles(rows);
+
+    exportAllenamentiToExcel(enriched, { fromDate, toDate });
   } catch (err) {
     console.error(err);
     alert("Errore imprevisto durante l'export");
@@ -471,17 +501,20 @@ function exportAllenamentiToExcel(rows, { fromDate, toDate }) {
     return;
   }
 
-  const formatted = rows.map((a) => ({
-    Utente: isAdmin ? (profilesMap[a.user_id] || safeNameFromId(a.user_id)) : "",
-    Data: a.data ? formatDate(a.data) : "",
-    Ora: a.ora_inizio || "",
-    Tipo: a.tipo || "",
-    Durata_min: a.durata ?? "",
-    Partecipanti: a.numero_partecipanti ?? "",
-    Trainer: a.persone ?? "",
-    Note: a.note ?? "",
-    ID: a.id ?? ""
-  }));
+  const formatted = rows.map((a) => {
+    const who = (a._full_name || "-");
+    return {
+      Data: a.data ? formatDate(a.data) : "",
+      Ora: a.ora_inizio || "",
+      Tipo: a.tipo || "",
+      Durata_min: a.durata ?? "",
+      Partecipanti: a.numero_partecipanti ?? "",
+      Trainer: a.persone ?? "",
+      Inserito_da: isAdmin ? who : "", // admin-only
+      Note: a.note ?? "",
+      ID: a.id ?? ""
+    };
+  });
 
   const ws = XLSX.utils.json_to_sheet(formatted);
 
