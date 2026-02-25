@@ -10,6 +10,11 @@ const authDiv = document.getElementById("auth");
 const appDiv = document.getElementById("app");
 const listaDiv = document.getElementById("lista");
 const listaTitle = document.getElementById("lista-title");
+const adminFiltersDiv = document.getElementById("adminFilters");
+const userFilterSelect = document.getElementById("userFilter");
+
+let isAdminUser = false;
+let selectedUserId = null;
 
 const emailInput = document.getElementById("email");
 const passwordInput = document.getElementById("password");
@@ -53,6 +58,19 @@ document.getElementById("registerBtn").onclick = async () => {
 
 document.getElementById("logoutBtn").onclick = async () => {
   await supabaseClient.auth.signOut();
+
+  // ✅ pulizia UI/dati
+  allenamentiMese = [];
+  giornoSelezionato = null;
+  listaDiv.innerHTML = "";
+  listaTitle.textContent = "Allenamenti";
+
+  // ✅ reset filtri admin
+  isAdminUser = false;
+  selectedUserId = null;
+  if (adminFiltersDiv) adminFiltersDiv.style.display = "none";
+  if (userFilterSelect) userFilterSelect.innerHTML = "";
+
   authDiv.style.display = "block";
   appDiv.style.display = "none";
 };
@@ -62,15 +80,69 @@ async function checkSession() {
   if (session) {
     authDiv.style.display = "none";
     appDiv.style.display = "block";
+    await initAdminFilters();
     caricaAllenamentiMese();
   } else {
     authDiv.style.display = "block";
     appDiv.style.display = "none";
   }
 }
+
 checkSession();
 
-// ================= INSERIMENTO =================
+async function initAdminFilters() {
+  isAdminUser = false;
+  selectedUserId = null;
+
+  // Nascondi per default
+  if (adminFiltersDiv) adminFiltersDiv.style.display = "none";
+  if (userFilterSelect) userFilterSelect.innerHTML = "";
+
+  // Capisci se l'utente è admin
+  const { data: roleRow, error: roleErr } = await supabaseClient
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", (await supabaseClient.auth.getUser()).data.user?.id)
+    .maybeSingle();
+
+  if (roleErr) {
+    console.warn("Impossibile leggere user_roles:", roleErr.message);
+    return;
+  }
+
+  isAdminUser = roleRow?.role === "admin";
+  if (!isAdminUser) return;
+
+  // Carica elenco utenti (profili)
+  const { data: profiles, error: profErr } = await supabaseClient
+    .from("profiles")
+    .select("id, full_name")
+    .order("full_name", { ascending: true });
+
+  if (profErr) {
+    console.warn("Impossibile leggere profiles:", profErr.message);
+    return;
+  }
+
+  if (!adminFiltersDiv || !userFilterSelect) return;
+
+  adminFiltersDiv.style.display = "flex";
+
+  // Opzione "Tutti"
+  userFilterSelect.innerHTML = '<option value="">Tutti</option>' + (profiles || [])
+    .map(p => {
+      const label = (p.full_name && p.full_name.trim()) ? p.full_name.trim() : (p.id ? p.id.slice(0, 8) + "…" : "Senza nome");
+      return `<option value="${p.id}">${label}</option>`;
+    })
+    .join("");
+
+  userFilterSelect.onchange = () => {
+    selectedUserId = userFilterSelect.value || null;
+    caricaAllenamentiMese();
+    if (giornoSelezionato) caricaAllenamenti(giornoSelezionato);
+  };
+}
+
 form.onsubmit = async (e) => {
   e.preventDefault();
 
@@ -103,11 +175,17 @@ async function caricaAllenamentiMese() {
   const start = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
   const end = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
 
-  const { data, error } = await supabaseClient
+  let q = supabaseClient
     .from("allenamenti")
     .select("*, profiles(full_name)")
     .gte("data", start.toISOString().split("T")[0])
     .lte("data", end.toISOString().split("T")[0]);
+
+  if (isAdminUser && selectedUserId) {
+    q = q.eq("user_id", selectedUserId);
+  }
+
+  const { data, error } = await q;
 
   if (error) {
     console.error(error);
@@ -178,11 +256,17 @@ nextMonthBtn.onclick = () => {
 
 // ================= LISTA (CARD MOBILE) =================
 async function caricaAllenamenti(data) {
-  const { data: rows, error } = await supabaseClient
+  let q = supabaseClient
     .from("allenamenti")
     .select("*, profiles(full_name)")
     .eq("data", data)
     .order("ora_inizio");
+
+  if (isAdminUser && selectedUserId) {
+    q = q.eq("user_id", selectedUserId);
+  }
+
+  const { data: rows, error } = await q;
 
   if (error) {
     console.error(error);
@@ -203,7 +287,7 @@ async function caricaAllenamenti(data) {
         <div>📅 <strong>Data:</strong> ${formatDate(a.data)}</div>
         <div>⏰ <strong>Ora:</strong> ${a.ora_inizio}</div>
         <div>🏋️ <strong>Tipo:</strong> ${a.tipo}</div>
-        <div>👤 <strong>Inserito da:</strong> ${a.profiles?.full_name || "-"}</div>
+        ${isAdminUser ? `<div>👤 <strong>Inserito da:</strong> ${a.profiles?.full_name || "-"}</div>` : ""}
 
         <div>🤝 <strong>Trainer:</strong> ${a.persone || "-"}</div>
         <div>👥 <strong>Partecipanti:</strong> ${a.numero_partecipanti || "-"}</div>
