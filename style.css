@@ -176,3 +176,22 @@ button {
   }
 }
 
+
+
+/* ===== ADMIN FILTERS ===== */
+.admin-filters{
+  margin: 12px 0 16px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.admin-filters label{
+  width: auto;
+  margin: 0;
+  font-weight: 600;
+}
+.admin-filters select{
+  width: auto;
+  flex: 1;
+  margin: 0;
+}
