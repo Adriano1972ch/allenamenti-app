@@ -30,7 +30,7 @@ const nextMonthBtn = document.getElementById("nextMonth");
 const exportExcelBtn = document.getElementById("exportExcelBtn");
 const exportPdfBtn = document.getElementById("exportPdfBtn");
 
-// Export options (custom range)
+// Export options
 const exportOptions = document.getElementById("exportOptions");
 const customDatesWrap = document.getElementById("customDates");
 const dateFromInput = document.getElementById("dateFrom");
@@ -69,7 +69,6 @@ let giornoSelezionato = null;
 
 let currentUser = null;
 let isAdmin = false;
-
 let selectedUserId = "__all__"; // "__all__" = no filter
 
 // ================= UTILS =================
@@ -163,6 +162,7 @@ async function populateUserFilter() {
     .from("profiles")
     .select("id, full_name")
     .order("full_name", { ascending: true });
+
   if (error) {
     console.error("Errore caricamento utenti:", error);
     userFilterSelect.innerHTML = `<option value="__all__">Tutti</option>`;
@@ -170,6 +170,7 @@ async function populateUserFilter() {
     selectedUserId = "__all__";
     return;
   }
+
   const opts = [];
   opts.push(`<option value="__all__">Tutti</option>`);
   if (currentUser?.id) opts.push(`<option value="${currentUser.id}">Admin</option>`);
@@ -177,6 +178,7 @@ async function populateUserFilter() {
   userFilterSelect.innerHTML = opts.join("\n");
   userFilterSelect.value = "__all__";
   selectedUserId = "__all__";
+
   userFilterSelect.onchange = async () => {
     selectedUserId = userFilterSelect.value || "__all__";
     giornoSelezionato = null;
@@ -212,7 +214,27 @@ checkSession();
 // ================= INSERT =================
 form.onsubmit = async (e) => {
   e.preventDefault();
+
+  // session robusta (evita currentUser non aggiornato)
+  const { data: { session }, error: sessErr } = await supabaseClient.auth.getSession();
+  if (sessErr) {
+    console.error(sessErr);
+    alert("Errore sessione. Rifai login.");
+    return;
+  }
+  if (!session?.user?.id) {
+    alert("Sessione non valida. Rifai login.");
+    return;
+  }
+
+  // campi minimi
+  if (!dataInput.value || !ora_inizio.value || !tipo.value) {
+    alert("Compila almeno Data, Ora e Tipo.");
+    return;
+  }
+
   const allenamento = {
+    user_id: session.user.id, // ✅ fondamentale per FK
     tipo: tipo.value,
     data: dataInput.value,
     ora_inizio: ora_inizio.value,
@@ -221,8 +243,14 @@ form.onsubmit = async (e) => {
     persone: persone.value || null,
     note: note.value || null
   };
-  const { error } = await supabaseClient.from("allenamenti").insert(allenamento);
-  if (error) return alert(error.message);
+
+  const { error } = await supabaseClient.from("allenamenti").insert([allenamento]);
+  if (error) {
+    console.error(error);
+    alert(error.message);
+    return;
+  }
+
   form.reset();
   await caricaAllenamentiMese();
   if (giornoSelezionato) await caricaAllenamenti(giornoSelezionato);
@@ -271,10 +299,16 @@ function renderCalendar() {
     const dayRows = allenamentiMese.filter(a => a.data === dateStr);
     const hasWorkout = dayRows.length > 0;
 
-    // Color coding by people (based on "persone" free-text)
-    const namesText = dayRows.map(r => (r.persone || "")).join(" ").toLowerCase();
-    const hasSophie = namesText.includes("sophie");
-    const hasVivienne = namesText.includes("vivienne");
+    // Color coding by people (persone + note)
+    const namesText = dayRows
+      .map(r => `${r.persone || ""} ${r.note || ""}`)
+      .join(" ")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+
+    const hasSophie = /\bsophie\b/.test(namesText);
+    const hasVivienne = /\bvivienne\b/.test(namesText);
 
     let colorClass = "";
     if (hasSophie && hasVivienne) colorClass = "workout-both";
@@ -394,12 +428,11 @@ function closeExportOptions() {
 }
 
 function getExportRange() {
-  // If a day is selected from calendar, export that day
+  // se ho cliccato un giorno, esporta quel giorno
   if (giornoSelezionato) return { fromDate: giornoSelezionato, toDate: giornoSelezionato };
 
   const mode = getSelectedExportMode();
 
-  // Month mode: use the chosen month (fallback: currentMonth)
   if (mode === "month") {
     let y = currentMonth.getFullYear();
     let m = currentMonth.getMonth(); // 0-based
@@ -414,12 +447,10 @@ function getExportRange() {
     return { fromDate: isoDate(monthStart), toDate: isoDate(monthEnd) };
   }
 
-  // Custom range
   if (mode === "custom" && dateFromInput?.value && dateToInput?.value) {
     return { fromDate: dateFromInput.value, toDate: dateToInput.value };
   }
 
-  // Fallback: current month
   const monthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
   const monthEnd = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
   return { fromDate: isoDate(monthStart), toDate: isoDate(monthEnd) };
