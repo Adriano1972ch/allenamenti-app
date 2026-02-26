@@ -133,6 +133,26 @@
         </div>
       </section>
     </main>
+<div id="exportOptions" style="display: none; margin-top: 12px;">
+  <h4>Esporta:</h4>
+
+  <label>
+    <input type="radio" name="exportRange" value="month" checked> Mese
+  </label>
+  <div id="monthPicker" style="display: block; margin: 8px 0 10px 0;">
+    Mese: <input type="month" id="exportMonth">
+  </div>
+
+  <label>
+    <input type="radio" name="exportRange" value="custom"> Periodo personalizzato
+  </label>
+  <div id="customDates" style="display: none; margin-top: 8px;">
+    Dal: <input type="date" id="dateFrom"> 
+    Al: <input type="date" id="dateTo">
+  </div>
+
+  <button id="applyExport" style="margin-top: 8px;">Applica</button>
+</div>
 
     <nav class="bottom-nav">
       <button class="nav-item" data-target="view-dashboard">🏠<span>Dashboard</span></button>
