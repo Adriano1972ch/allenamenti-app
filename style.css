@@ -39,7 +39,6 @@ h2 {
   gap: 8px;
 }
 
-/* ===== DESKTOP TABLE ===== */
 .table-row {
   background: #fff;
   padding: 12px;
@@ -49,7 +48,16 @@ h2 {
   gap: 6px;
 }
 
-/* ================= MOBILE VIEW ================= */
+.actions {
+  display: flex;
+  gap: 10px;
+}
+
+.actions button {
+  flex: 1;
+}
+
+/* ================= MOBILE ================= */
 @media (max-width: 768px) {
   .table-row {
     display: block;
@@ -59,7 +67,7 @@ h2 {
     margin-bottom: 6px;
   }
 
-  .table-row button {
+  .actions button {
     width: 48%;
   }
 }
@@ -158,6 +166,17 @@ h2 {
   color: #333;
 }
 
+/* ================= EXPORT MENU ================= */
+.export-menu {
+  margin-top: 16px;
+  display: flex;
+  gap: 10px;
+}
+
+.export-menu button {
+  flex: 1;
+}
+
 /* ================= DESKTOP LAYOUT ================= */
 @media (min-width: 1024px) {
   #app {
@@ -176,12 +195,11 @@ h2 {
   #calendar,
   #lista-title,
   #lista,
-  #exportExcelBtn {
+  #exportMenu {
     grid-column: 2;
   }
 
-  #logoutBtn,
-  #exportExcelBtn {
+  #logoutBtn {
     width: auto;
   }
 }
