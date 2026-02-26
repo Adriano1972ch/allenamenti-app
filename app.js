@@ -40,7 +40,7 @@ const exportMonthInput = document.getElementById("exportMonth");
 const applyExportBtn = document.getElementById("applyExport");
 const exportRangeRadios = Array.from(document.querySelectorAll('input[name="exportRange"]'));
 
-let lastExportIntent = null; // "excel" | "pdf" (used when opening options first)
+let lastExportIntent = null; // "excel" | "pdf"
 
 // Views & nav
 const viewIds = ["view-dashboard", "view-calendar", "view-list"];
@@ -174,7 +174,7 @@ async function populateUserFilter() {
   opts.push(`<option value="__all__">Tutti</option>`);
   if (currentUser?.id) opts.push(`<option value="${currentUser.id}">Admin</option>`);
   (data || []).forEach(p => opts.push(`<option value="${p.id}">${p.full_name || "(senza nome)"}</option>`));
-  userFilterSelect.innerHTML = opts.join("\\n");
+  userFilterSelect.innerHTML = opts.join("\n");
   userFilterSelect.value = "__all__";
   selectedUserId = "__all__";
   userFilterSelect.onchange = async () => {
@@ -269,7 +269,6 @@ function renderCalendar() {
       `${String(d).padStart(2, "0")}`;
 
     const dayRows = allenamentiMese.filter(a => a.data === dateStr);
-
     const hasWorkout = dayRows.length > 0;
 
     // Color coding by people (based on "persone" free-text)
@@ -361,7 +360,6 @@ function getSelectedExportMode() {
 
 function syncCustomDatesVisibility() {
   const mode = getSelectedExportMode();
-
   if (customDatesWrap) customDatesWrap.style.display = (mode === "custom") ? "block" : "none";
   if (monthPickerWrap) monthPickerWrap.style.display = (mode === "month") ? "block" : "none";
 }
@@ -396,7 +394,7 @@ function closeExportOptions() {
 }
 
 function getExportRange() {
-  // If a day is selected from calendar, export that day (regardless of radio choice)
+  // If a day is selected from calendar, export that day
   if (giornoSelezionato) return { fromDate: giornoSelezionato, toDate: giornoSelezionato };
 
   const mode = getSelectedExportMode();
@@ -427,7 +425,6 @@ function getExportRange() {
   return { fromDate: isoDate(monthStart), toDate: isoDate(monthEnd) };
 }
 
-
 async function fetchExportRows() {
   const { fromDate, toDate } = getExportRange();
 
@@ -454,7 +451,6 @@ exportRangeRadios.forEach(r => r.addEventListener("change", () => {
 
 applyExportBtn?.addEventListener("click", async () => {
   try {
-    // Basic validation when custom is selected
     if (!giornoSelezionato && getSelectedExportMode() === "custom") {
       const from = dateFromInput?.value;
       const to = dateToInput?.value;
@@ -464,7 +460,6 @@ applyExportBtn?.addEventListener("click", async () => {
 
     closeExportOptions();
 
-    // If user opened options from an export button, run that export now
     if (lastExportIntent === "excel") await doExportExcel();
     if (lastExportIntent === "pdf") await doExportPdf();
     lastExportIntent = null;
@@ -475,49 +470,49 @@ applyExportBtn?.addEventListener("click", async () => {
 });
 
 // ================= EXPORT EXCEL =================
-async async function doExportExcel() {
-    try {
-      if (typeof XLSX === "undefined") return alert("Libreria XLSX non caricata.");
-      const { rows, fromDate, toDate } = await fetchExportRows();
-      if (!rows || rows.length === 0) return alert("Nessun dato da esportare");
-  
-      const formatted = rows.map((a) => ({
-        Data: a.data ? formatDate(a.data) : "",
-        Ora: a.ora_inizio || "",
-        Tipo: a.tipo || "",
-        Durata_min: a.durata ?? "",
-        Partecipanti: a.numero_partecipanti ?? "",
-        Trainer: a.persone ?? "",
-        Inserito_da: isAdmin ? (a._full_name || "-") : "",
-        Note: a.note ?? "",
-        ID: a.id ?? ""
-      }));
-  
-      const ws = XLSX.utils.json_to_sheet(formatted);
-  
-      const headers = Object.keys(formatted[0] || {});
-      ws["!cols"] = headers.map((h) => {
-        const maxLen = Math.max(h.length, ...formatted.map((r) => String(r[h] ?? "").length));
-        return { wch: Math.min(Math.max(maxLen + 2, 10), 40) };
-      });
-  
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, giornoSelezionato ? "Giorno" : "Mese");
-  
-      const safeFrom = fromDate.replaceAll("-", "");
-      const safeTo = toDate.replaceAll("-", "");
-      const fileName = giornoSelezionato ? `allenamenti_${safeFrom}.xlsx` : `allenamenti_${safeFrom}_${safeTo}.xlsx`;
-      XLSX.writeFile(wb, fileName);
-    } catch (e) {
-      console.error(e);
-      alert("Errore export Excel");
-    }
+async function doExportExcel() {
+  try {
+    if (typeof XLSX === "undefined") return alert("Libreria XLSX non caricata.");
+    const { rows, fromDate, toDate } = await fetchExportRows();
+    if (!rows || rows.length === 0) return alert("Nessun dato da esportare");
+
+    const formatted = rows.map((a) => ({
+      Data: a.data ? formatDate(a.data) : "",
+      Ora: a.ora_inizio || "",
+      Tipo: a.tipo || "",
+      Durata_min: a.durata ?? "",
+      Partecipanti: a.numero_partecipanti ?? "",
+      Trainer: a.persone ?? "",
+      Inserito_da: isAdmin ? (a._full_name || "-") : "",
+      Note: a.note ?? "",
+      ID: a.id ?? ""
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(formatted);
+
+    const headers = Object.keys(formatted[0] || {});
+    ws["!cols"] = headers.map((h) => {
+      const maxLen = Math.max(h.length, ...formatted.map((r) => String(r[h] ?? "").length));
+      return { wch: Math.min(Math.max(maxLen + 2, 10), 40) };
+    });
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, giornoSelezionato ? "Giorno" : "Periodo");
+
+    const safeFrom = fromDate.replaceAll("-", "");
+    const safeTo = toDate.replaceAll("-", "");
+    const fileName = giornoSelezionato ? `allenamenti_${safeFrom}.xlsx` : `allenamenti_${safeFrom}_${safeTo}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+  } catch (e) {
+    console.error(e);
+    alert("Errore export Excel");
+  }
 }
 
 exportExcelBtn?.addEventListener("click", async () => {
   try {
-    // First click opens range options (if available and no day selected)
-    if (!giornoSelezionato && exportOptions && exportOptions.style.display === "none") {
+    const isHidden = exportOptions ? (getComputedStyle(exportOptions).display === "none") : true;
+    if (!giornoSelezionato && exportOptions && isHidden) {
       openExportOptions("excel");
       return;
     }
@@ -530,78 +525,80 @@ exportExcelBtn?.addEventListener("click", async () => {
 
 // ================= EXPORT PDF =================
 async function doExportPdf() {
-    try {
-      const { rows, fromDate, toDate } = await fetchExportRows();
-      if (!rows || rows.length === 0) return alert("Nessun dato da esportare");
-  
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF({ unit: "pt", format: "a4" });
-  
-      const title = giornoSelezionato ? `Report Allenamenti (${fromDate})` : `Report Allenamenti (${monthLabel(currentMonth)})`;
-      const subtitle = `Periodo: ${fromDate} → ${toDate}`;
-  
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(16);
-      doc.text(title, 40, 50);
-  
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(11);
-      doc.text(subtitle, 40, 70);
-  
-      const headers = ["Data", "Ora", "Tipo", "Durata", "Partecipanti", "Trainer", ...(isAdmin ? ["Inserito da"] : [])];
-      const colWidths = isAdmin ? [70, 50, 140, 60, 80, 110, 90] : [70, 50, 160, 60, 80, 120];
-  
-      let y = 95;
-      let x = 40;
-  
-      doc.setFont("helvetica", "bold");
-      headers.forEach((h, i) => { doc.text(h, x, y); x += colWidths[i]; });
-      doc.setDrawColor(200);
-      doc.line(40, y + 6, 555, y + 6);
-  
-      y += 24;
-      doc.setFont("helvetica", "normal");
-  
-      const pageBottom = 800;
-  
-      rows.forEach((a) => {
-        const row = [
-          a.data ? formatDate(a.data) : "",
-          a.ora_inizio || "",
-          a.tipo || "",
-          a.durata ? `${a.durata}m` : "-",
-          a.numero_partecipanti ?? "-",
-          a.persone || "-",
-          ...(isAdmin ? [a._full_name || "-"] : [])
-        ];
-  
-        if (y > pageBottom) { doc.addPage(); y = 60; }
-  
-        let xx = 40;
-        row.forEach((val, i) => {
-          const text = String(val ?? "");
-          const maxChars = Math.floor((colWidths[i] || 80) / 6);
-          const clipped = text.length > maxChars ? text.slice(0, maxChars - 1) + "…" : text;
-          doc.text(clipped, xx, y);
-          xx += colWidths[i];
-        });
-        y += 18;
+  try {
+    const { rows, fromDate, toDate } = await fetchExportRows();
+    if (!rows || rows.length === 0) return alert("Nessun dato da esportare");
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: "pt", format: "a4" });
+
+    const title = giornoSelezionato
+      ? `Report Allenamenti (${fromDate})`
+      : `Report Allenamenti (${monthLabel(currentMonth)})`;
+    const subtitle = `Periodo: ${fromDate} → ${toDate}`;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text(title, 40, 50);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.text(subtitle, 40, 70);
+
+    const headers = ["Data", "Ora", "Tipo", "Durata", "Partecipanti", "Trainer", ...(isAdmin ? ["Inserito da"] : [])];
+    const colWidths = isAdmin ? [70, 50, 140, 60, 80, 110, 90] : [70, 50, 160, 60, 80, 120];
+
+    let y = 95;
+    let x = 40;
+
+    doc.setFont("helvetica", "bold");
+    headers.forEach((h, i) => { doc.text(h, x, y); x += colWidths[i]; });
+    doc.setDrawColor(200);
+    doc.line(40, y + 6, 555, y + 6);
+
+    y += 24;
+    doc.setFont("helvetica", "normal");
+
+    const pageBottom = 800;
+
+    rows.forEach((a) => {
+      const row = [
+        a.data ? formatDate(a.data) : "",
+        a.ora_inizio || "",
+        a.tipo || "",
+        a.durata ? `${a.durata}m` : "-",
+        a.numero_partecipanti ?? "-",
+        a.persone || "-",
+        ...(isAdmin ? [a._full_name || "-"] : [])
+      ];
+
+      if (y > pageBottom) { doc.addPage(); y = 60; }
+
+      let xx = 40;
+      row.forEach((val, i) => {
+        const text = String(val ?? "");
+        const maxChars = Math.floor((colWidths[i] || 80) / 6);
+        const clipped = text.length > maxChars ? text.slice(0, maxChars - 1) + "…" : text;
+        doc.text(clipped, xx, y);
+        xx += colWidths[i];
       });
-  
-      const safeFrom = fromDate.replaceAll("-", "");
-      const safeTo = toDate.replaceAll("-", "");
-      const filename = giornoSelezionato ? `allenamenti_${safeFrom}.pdf` : `allenamenti_${safeFrom}_${safeTo}.pdf`;
-      doc.save(filename);
-    } catch (e) {
-      console.error(e);
-      alert("Errore export PDF");
-    }
+      y += 18;
+    });
+
+    const safeFrom = fromDate.replaceAll("-", "");
+    const safeTo = toDate.replaceAll("-", "");
+    const filename = giornoSelezionato ? `allenamenti_${safeFrom}.pdf` : `allenamenti_${safeFrom}_${safeTo}.pdf`;
+    doc.save(filename);
+  } catch (e) {
+    console.error(e);
+    alert("Errore export PDF");
+  }
 }
 
 exportPdfBtn?.addEventListener("click", async () => {
   try {
-    // First click opens range options (if available and no day selected)
-    if (!giornoSelezionato && exportOptions && exportOptions.style.display === "none") {
+    const isHidden = exportOptions ? (getComputedStyle(exportOptions).display === "none") : true;
+    if (!giornoSelezionato && exportOptions && isHidden) {
       openExportOptions("pdf");
       return;
     }
