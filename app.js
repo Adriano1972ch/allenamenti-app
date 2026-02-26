@@ -8,10 +8,10 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 // ================= DOM =================
 const authDiv = document.getElementById("auth");
 const appDiv = document.getElementById("app");
-const listaDiv = document.getElementById("lista");
-const listaTitle = document.getElementById("lista-title");
 
-const fullNameInput = document.getElementById("full_name"); // opzionale
+const whoami = document.getElementById("whoami");
+
+const fullNameInput = document.getElementById("full_name"); // optional
 const emailInput = document.getElementById("email");
 const passwordInput = document.getElementById("password");
 
@@ -30,9 +30,25 @@ const nextMonthBtn = document.getElementById("nextMonth");
 const exportExcelBtn = document.getElementById("exportExcelBtn");
 const exportPdfBtn = document.getElementById("exportPdfBtn");
 
-// Admin filter (opzionale)
-const userFilterSelect = document.getElementById("userFilter"); // <select>
-const userFilterWrap = document.getElementById("userFilterWrap"); // opzionale container
+// Views & nav
+const viewIds = ["view-dashboard", "view-calendar", "view-list"];
+const navButtons = Array.from(document.querySelectorAll(".nav-item"));
+const dashGoCalendarBtn = document.getElementById("dashGoCalendarBtn");
+const dashGoListBtn = document.getElementById("dashGoListBtn");
+
+// Dashboard fields
+const dashSessions = document.getElementById("dashSessions");
+const dashHours = document.getElementById("dashHours");
+const dashAvgParticipants = document.getElementById("dashAvgParticipants");
+const dashPeriod = document.getElementById("dashPeriod");
+
+// Admin filter
+const userFilterSelect = document.getElementById("userFilter");
+const userFilterWrap = document.getElementById("userFilterWrap");
+
+// List
+const listaDiv = document.getElementById("lista");
+const listaTitle = document.getElementById("lista-title");
 
 // ================= STATE =================
 let currentMonth = new Date();
@@ -42,17 +58,30 @@ let giornoSelezionato = null;
 let currentUser = null;
 let isAdmin = false;
 
-// "__all__" = nessun filtro (tutti)
-let selectedUserId = "__all__";
+let selectedUserId = "__all__"; // "__all__" = no filter
 
 // ================= UTILS =================
+function isoDate(d) { return d.toISOString().split("T")[0]; }
 function formatDate(dateStr) {
   const [y, m, d] = dateStr.split("-");
   return `${d}.${m}.${y}`;
 }
+function monthLabel(dateObj) {
+  return dateObj.toLocaleDateString("it-IT", { month: "long", year: "numeric" });
+}
+function safeNumber(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
 
-function isoDate(d) {
-  return d.toISOString().split("T")[0];
+function showView(id) {
+  viewIds.forEach(v => {
+    const el = document.getElementById(v);
+    if (!el) return;
+    el.style.display = (v === id) ? "block" : "none";
+  });
+  navButtons.forEach(btn => btn.classList.toggle("active", btn.dataset.target === id));
+  if (id === "view-list" && giornoSelezionato) caricaAllenamenti(giornoSelezionato);
 }
 
 async function getIsAdmin() {
@@ -62,37 +91,23 @@ async function getIsAdmin() {
     .select("role")
     .eq("user_id", currentUser.id)
     .maybeSingle();
-
-  if (error) {
-    console.error("Errore lettura ruolo:", error);
-    return false;
-  }
+  if (error) { console.error("Errore lettura ruolo:", error); return false; }
   return data?.role === "admin";
 }
 
-// Enrich robusto: anche senza FK/embedded select
 async function enrichWithProfiles(rows) {
-  const ids = Array.from(new Set((rows || []).map((r) => r.user_id).filter(Boolean)));
+  const ids = Array.from(new Set((rows || []).map(r => r.user_id).filter(Boolean)));
   if (ids.length === 0) return rows || [];
-
   const { data: profs, error } = await supabaseClient
     .from("profiles")
     .select("id, full_name")
     .in("id", ids);
-
-  if (error) {
-    console.error("Errore lettura profiles:", error);
-    return rows || [];
-  }
-
-  const map = new Map((profs || []).map((p) => [p.id, p.full_name]));
-  return (rows || []).map((r) => ({
-    ...r,
-    _full_name: map.get(r.user_id) || null
-  }));
+  if (error) { console.error("Errore lettura profiles:", error); return rows || []; }
+  const map = new Map((profs || []).map(p => [p.id, p.full_name]));
+  return (rows || []).map(r => ({ ...r, _full_name: map.get(r.user_id) || null }));
 }
 
-// ================= AUTH =================
+// ================= AUTH UI =================
 document.getElementById("loginBtn").onclick = async () => {
   const { error } = await supabaseClient.auth.signInWithPassword({
     email: emailInput.value,
@@ -104,48 +119,64 @@ document.getElementById("loginBtn").onclick = async () => {
 
 document.getElementById("registerBtn").onclick = async () => {
   const full_name = fullNameInput ? (fullNameInput.value || "").trim() : "";
-
   const { error } = await supabaseClient.auth.signUp({
     email: emailInput.value,
     password: passwordInput.value,
-    options: {
-      data: { full_name }
-    }
+    options: { data: { full_name } }
   });
-
   if (error) alert(error.message);
-  else alert("Registrazione completata");
+  else alert("Registrazione completata!");
 };
 
 document.getElementById("logoutBtn").onclick = async () => {
   await supabaseClient.auth.signOut();
-
-  // ✅ pulizia UI / state
-  currentUser = null;
-  isAdmin = false;
-  selectedUserId = "__all__";
-
-  allenamentiMese = [];
-  giornoSelezionato = null;
-
-  if (listaDiv) listaDiv.innerHTML = "";
-  if (listaTitle) listaTitle.textContent = "Allenamenti";
-
+  currentUser = null; isAdmin = false; selectedUserId = "__all__";
+  allenamentiMese = []; giornoSelezionato = null;
+  listaDiv.innerHTML = ""; listaTitle.textContent = "Allenamenti";
   if (userFilterSelect) userFilterSelect.value = "__all__";
   if (userFilterWrap) userFilterWrap.style.display = "none";
-
   authDiv.style.display = "block";
   appDiv.style.display = "none";
 };
 
-async function checkSession() {
-  const { data: { session } } = await supabaseClient.auth.getSession();
+// ================= NAV =================
+navButtons.forEach(btn => btn.addEventListener("click", () => showView(btn.dataset.target)));
+dashGoCalendarBtn?.addEventListener("click", () => showView("view-calendar"));
+dashGoListBtn?.addEventListener("click", () => showView("view-list"));
 
-  if (!session) {
-    authDiv.style.display = "block";
-    appDiv.style.display = "none";
+// ================= DATA LOAD =================
+async function populateUserFilter() {
+  if (!userFilterSelect) return;
+  const { data, error } = await supabaseClient
+    .from("profiles")
+    .select("id, full_name")
+    .order("full_name", { ascending: true });
+  if (error) {
+    console.error("Errore caricamento utenti:", error);
+    userFilterSelect.innerHTML = `<option value="__all__">Tutti</option>`;
+    userFilterSelect.value = "__all__";
+    selectedUserId = "__all__";
     return;
   }
+  const opts = [];
+  opts.push(`<option value="__all__">Tutti</option>`);
+  if (currentUser?.id) opts.push(`<option value="${currentUser.id}">Admin</option>`);
+  (data || []).forEach(p => opts.push(`<option value="${p.id}">${p.full_name || "(senza nome)"}</option>`));
+  userFilterSelect.innerHTML = opts.join("\\n");
+  userFilterSelect.value = "__all__";
+  selectedUserId = "__all__";
+  userFilterSelect.onchange = async () => {
+    selectedUserId = userFilterSelect.value || "__all__";
+    giornoSelezionato = null;
+    listaDiv.innerHTML = "";
+    listaTitle.textContent = "Allenamenti";
+    await caricaAllenamentiMese();
+  };
+}
+
+async function checkSession() {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session) { authDiv.style.display = "block"; appDiv.style.display = "none"; return; }
 
   currentUser = session.user;
   isAdmin = await getIsAdmin();
@@ -153,65 +184,22 @@ async function checkSession() {
   authDiv.style.display = "none";
   appDiv.style.display = "block";
 
-  // Admin: prepara dropdown utenti se presente
-  if (userFilterSelect) {
-    if (isAdmin) {
-      if (userFilterWrap) userFilterWrap.style.display = "block";
+  const display = currentUser.user_metadata?.full_name || currentUser.email || "";
+  whoami.textContent = isAdmin ? `👑 ${display} (admin)` : `👤 ${display}`;
 
-      await populateUserFilter();
-      userFilterSelect.onchange = async () => {
-        selectedUserId = userFilterSelect.value || "__all__";
-        giornoSelezionato = null;
-        if (listaDiv) listaDiv.innerHTML = "";
-        if (listaTitle) listaTitle.textContent = "Allenamenti";
-        await caricaAllenamentiMese();
-      };
-    } else {
-      if (userFilterWrap) userFilterWrap.style.display = "none";
-      userFilterSelect.innerHTML = "";
-    }
+  if (userFilterSelect && userFilterWrap) {
+    if (isAdmin) { userFilterWrap.style.display = "flex"; await populateUserFilter(); }
+    else { userFilterWrap.style.display = "none"; }
   }
 
   await caricaAllenamentiMese();
+  showView("view-dashboard");
 }
-
 checkSession();
 
-async function populateUserFilter() {
-  if (!userFilterSelect) return;
-
-  const { data, error } = await supabaseClient
-    .from("profiles")
-    .select("id, full_name")
-    .order("full_name", { ascending: true });
-
-  if (error) {
-    console.error("Errore caricamento utenti:", error);
-    userFilterSelect.innerHTML = `<option value="__all__">Tutti</option>`;
-    selectedUserId = "__all__";
-    return;
-  }
-
-  const options = [];
-  options.push(`<option value="__all__">Tutti</option>`);
-
-  // scelta rapida: admin = solo miei
-  if (currentUser?.id) options.push(`<option value="${currentUser.id}">Admin</option>`);
-
-  (data || []).forEach((p) => {
-    const label = p.full_name || "(senza nome)";
-    options.push(`<option value="${p.id}">${label}</option>`);
-  });
-
-  userFilterSelect.innerHTML = options.join("\n");
-  selectedUserId = "__all__";
-  userFilterSelect.value = "__all__";
-}
-
-// ================= INSERIMENTO =================
+// ================= INSERT =================
 form.onsubmit = async (e) => {
   e.preventDefault();
-
   const allenamento = {
     tipo: tipo.value,
     data: dataInput.value,
@@ -220,21 +208,15 @@ form.onsubmit = async (e) => {
     numero_partecipanti: numero_partecipanti.value || null,
     persone: persone.value || null,
     note: note.value || null
-    // user_id: default auth.uid() nel DB
   };
-
-  const { error } = await supabaseClient
-    .from("allenamenti")
-    .insert(allenamento);
-
+  const { error } = await supabaseClient.from("allenamenti").insert(allenamento);
   if (error) return alert(error.message);
-
   form.reset();
   await caricaAllenamentiMese();
   if (giornoSelezionato) await caricaAllenamenti(giornoSelezionato);
 };
 
-// ================= CALENDARIO =================
+// ================= CALENDAR =================
 async function caricaAllenamentiMese() {
   const start = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
   const end = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
@@ -245,21 +227,14 @@ async function caricaAllenamentiMese() {
     .gte("data", isoDate(start))
     .lte("data", isoDate(end));
 
-  if (isAdmin && selectedUserId && selectedUserId !== "__all__") {
-    query = query.eq("user_id", selectedUserId);
-  }
+  if (isAdmin && selectedUserId !== "__all__") query = query.eq("user_id", selectedUserId);
 
   const { data, error } = await query;
-
-  if (error) {
-    console.error(error);
-    allenamentiMese = [];
-    renderCalendar();
-    return;
-  }
+  if (error) { console.error(error); allenamentiMese = []; renderCalendar(); updateDashboard(); return; }
 
   allenamentiMese = await enrichWithProfiles(data || []);
   renderCalendar();
+  updateDashboard();
 }
 
 function renderCalendar() {
@@ -268,23 +243,10 @@ function renderCalendar() {
   if (!grid || !title) return;
 
   grid.innerHTML = "";
+  title.textContent = monthLabel(currentMonth);
 
-  title.textContent = currentMonth.toLocaleDateString("it-IT", {
-    month: "long",
-    year: "numeric"
-  });
-
-  const firstDay = new Date(
-    currentMonth.getFullYear(),
-    currentMonth.getMonth(),
-    1
-  ).getDay() || 7;
-
-  const daysInMonth = new Date(
-    currentMonth.getFullYear(),
-    currentMonth.getMonth() + 1,
-    0
-  ).getDate();
+  const firstDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).getDay() || 7;
+  const daysInMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate();
 
   for (let i = 1; i < firstDay; i++) grid.innerHTML += "<div></div>";
 
@@ -307,20 +269,14 @@ function renderCalendar() {
 window.selezionaGiorno = function (data) {
   giornoSelezionato = data;
   listaTitle.textContent = `Allenamenti del ${formatDate(data)}`;
+  showView("view-list");
   caricaAllenamenti(data);
 };
 
-prevMonthBtn.onclick = () => {
-  currentMonth.setMonth(currentMonth.getMonth() - 1);
-  caricaAllenamentiMese();
-};
+prevMonthBtn.onclick = () => { currentMonth.setMonth(currentMonth.getMonth() - 1); caricaAllenamentiMese(); };
+nextMonthBtn.onclick = () => { currentMonth.setMonth(currentMonth.getMonth() + 1); caricaAllenamentiMese(); };
 
-nextMonthBtn.onclick = () => {
-  currentMonth.setMonth(currentMonth.getMonth() + 1);
-  caricaAllenamentiMese();
-};
-
-// ================= LISTA =================
+// ================= LIST =================
 async function caricaAllenamenti(data) {
   let query = supabaseClient
     .from("allenamenti")
@@ -328,29 +284,17 @@ async function caricaAllenamenti(data) {
     .eq("data", data)
     .order("ora_inizio");
 
-  if (isAdmin && selectedUserId && selectedUserId !== "__all__") {
-    query = query.eq("user_id", selectedUserId);
-  }
+  if (isAdmin && selectedUserId !== "__all__") query = query.eq("user_id", selectedUserId);
 
   const { data: rows, error } = await query;
-
-  if (error) {
-    console.error(error);
-    listaDiv.innerHTML = "<p>Errore caricamento</p>";
-    return;
-  }
+  if (error) { console.error(error); listaDiv.innerHTML = "<p>Errore caricamento</p>"; return; }
 
   const enriched = await enrichWithProfiles(rows || []);
-
   listaDiv.innerHTML = "";
-  if (!enriched || enriched.length === 0) {
-    listaDiv.innerHTML = "<p>Nessun allenamento</p>";
-    return;
-  }
+  if (!enriched || enriched.length === 0) { listaDiv.innerHTML = "<p>Nessun allenamento</p>"; return; }
 
   enriched.forEach(a => {
     const who = (a._full_name || "-");
-
     listaDiv.innerHTML += `
       <div class="table-row">
         <div>📅 <strong>Data:</strong> ${formatDate(a.data)}</div>
@@ -359,93 +303,38 @@ async function caricaAllenamenti(data) {
         <div>🤝 <strong>Trainer:</strong> ${a.persone || "-"}</div>
         <div>👥 <strong>Partecipanti:</strong> ${a.numero_partecipanti || "-"}</div>
         <div>⏱ <strong>Durata:</strong> ${a.durata ? a.durata + " min" : "-"}</div>
-
         ${isAdmin ? `<div>👤 <strong>Inserito da:</strong> ${who}</div>` : ""}
-
         <div>📝 <strong>Note:</strong> ${a.note || "-"}</div>
-
-        <div class="actions">
-          <button onclick="modificaAllenamento('${a.id}')">✏️</button>
-          <button onclick="eliminaAllenamento('${a.id}')">🗑️</button>
-        </div>
       </div>
     `;
   });
 }
 
-// ================= MODIFICA =================
-window.modificaAllenamento = async function (id) {
-  const { data: a, error } = await supabaseClient
-    .from("allenamenti")
-    .select("*")
-    .eq("id", id)
-    .single();
+// ================= DASHBOARD =================
+function updateDashboard() {
+  const start = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+  const end = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
+  dashPeriod.textContent = `${formatDate(isoDate(start))} → ${formatDate(isoDate(end))} (${monthLabel(currentMonth)})`;
 
-  if (error || !a) return;
+  const rows = allenamentiMese || [];
+  const sessions = rows.length;
+  const totalMinutes = rows.reduce((acc, r) => acc + safeNumber(r.durata), 0);
+  const hours = totalMinutes / 60;
 
-  const newTipo = prompt("Tipo:", a.tipo);
-  if (newTipo === null) return;
+  const participantsSum = rows.reduce((acc, r) => acc + safeNumber(r.numero_partecipanti), 0);
+  const avgParticipants = sessions > 0 ? (participantsSum / sessions) : 0;
 
-  const newData = prompt("Data (YYYY-MM-DD):", a.data);
-  if (newData === null) return;
+  dashSessions.textContent = String(sessions);
+  dashHours.textContent = sessions > 0 ? hours.toFixed(1) : "0.0";
+  dashAvgParticipants.textContent = sessions > 0 ? avgParticipants.toFixed(1) : "0.0";
+}
 
-  const newOra = prompt("Ora:", a.ora_inizio);
-  if (newOra === null) return;
-
-  const newDurata = prompt("Durata (min):", a.durata ?? "");
-  if (newDurata === null) return;
-
-  const newPartecipanti = prompt("Partecipanti:", a.numero_partecipanti ?? "");
-  if (newPartecipanti === null) return;
-
-  const newTrainer = prompt("Trainer:", a.persone ?? "");
-  if (newTrainer === null) return;
-
-  const newNote = prompt("Note:", a.note ?? "");
-  if (newNote === null) return;
-
-  const { error: upErr } = await supabaseClient
-    .from("allenamenti")
-    .update({
-      tipo: newTipo,
-      data: newData,
-      ora_inizio: newOra,
-      durata: newDurata || null,
-      numero_partecipanti: newPartecipanti || null,
-      persone: newTrainer || null,
-      note: newNote || null
-    })
-    .eq("id", id);
-
-  if (upErr) alert(upErr.message);
-
-  await caricaAllenamentiMese();
-  if (giornoSelezionato) await caricaAllenamenti(giornoSelezionato);
-};
-
-// ================= ELIMINA =================
-window.eliminaAllenamento = async function (id) {
-  if (!confirm("Eliminare allenamento?")) return;
-
-  const { error } = await supabaseClient
-    .from("allenamenti")
-    .delete()
-    .eq("id", id);
-
-  if (error) alert(error.message);
-
-  await caricaAllenamentiMese();
-  if (giornoSelezionato) await caricaAllenamenti(giornoSelezionato);
-};
-
-// ================= EXPORT COMMON =================
+// ================= EXPORT HELPERS =================
 function getExportRange() {
   const monthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
   const monthEnd = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
-
   const fromDate = giornoSelezionato || isoDate(monthStart);
   const toDate = giornoSelezionato || isoDate(monthEnd);
-
   return { fromDate, toDate };
 }
 
@@ -460,42 +349,21 @@ async function fetchExportRows() {
     .order("data", { ascending: true })
     .order("ora_inizio", { ascending: true });
 
-  if (isAdmin && selectedUserId && selectedUserId !== "__all__") {
-    query = query.eq("user_id", selectedUserId);
-  }
+  if (isAdmin && selectedUserId !== "__all__") query = query.eq("user_id", selectedUserId);
 
   const { data, error } = await query;
   if (error) throw error;
-
-  const enriched = await enrichWithProfiles(data || []);
-  return { rows: enriched, fromDate, toDate };
+  return { rows: await enrichWithProfiles(data || []), fromDate, toDate };
 }
 
 // ================= EXPORT EXCEL =================
 exportExcelBtn?.addEventListener("click", async () => {
   try {
-    if (typeof XLSX === "undefined") {
-      alert("Libreria XLSX non caricata. Controlla index.html.");
-      return;
-    }
-
+    if (typeof XLSX === "undefined") return alert("Libreria XLSX non caricata.");
     const { rows, fromDate, toDate } = await fetchExportRows();
+    if (!rows || rows.length === 0) return alert("Nessun dato da esportare");
 
-    if (!rows || rows.length === 0) {
-      alert("Nessun dato da esportare");
-      return;
-    }
-
-    exportAllenamentiToExcel(rows, { fromDate, toDate });
-  } catch (err) {
-    console.error(err);
-    alert("Errore durante l'export Excel");
-  }
-});
-
-function exportAllenamentiToExcel(rows, { fromDate, toDate }) {
-  const formatted = rows.map((a) => {
-    return {
+    const formatted = rows.map((a) => ({
       Data: a.data ? formatDate(a.data) : "",
       Ora: a.ora_inizio || "",
       Tipo: a.tipo || "",
@@ -503,123 +371,97 @@ function exportAllenamentiToExcel(rows, { fromDate, toDate }) {
       Partecipanti: a.numero_partecipanti ?? "",
       Trainer: a.persone ?? "",
       Inserito_da: isAdmin ? (a._full_name || "-") : "",
-      Note: a.note ?? ""
-    };
-  });
+      Note: a.note ?? "",
+      ID: a.id ?? ""
+    }));
 
-  const ws = XLSX.utils.json_to_sheet(formatted);
+    const ws = XLSX.utils.json_to_sheet(formatted);
 
-  // Auto-width semplice
-  const headers = Object.keys(formatted[0] || {});
-  ws["!cols"] = headers.map((h) => {
-    const maxLen = Math.max(h.length, ...formatted.map((r) => String(r[h] ?? "").length));
-    return { wch: Math.min(Math.max(maxLen + 2, 10), 40) };
-  });
+    const headers = Object.keys(formatted[0] || {});
+    ws["!cols"] = headers.map((h) => {
+      const maxLen = Math.max(h.length, ...formatted.map((r) => String(r[h] ?? "").length));
+      return { wch: Math.min(Math.max(maxLen + 2, 10), 40) };
+    });
 
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Allenamenti");
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, giornoSelezionato ? "Giorno" : "Mese");
 
-  const safeFrom = fromDate.replaceAll("-", "");
-  const safeTo = toDate.replaceAll("-", "");
-
-  const fileName = (fromDate === toDate)
-    ? `allenamenti_${safeFrom}.xlsx`
-    : `allenamenti_${safeFrom}_${safeTo}.xlsx`;
-
-  XLSX.writeFile(wb, fileName);
-}
+    const safeFrom = fromDate.replaceAll("-", "");
+    const safeTo = toDate.replaceAll("-", "");
+    const fileName = giornoSelezionato ? `allenamenti_${safeFrom}.xlsx` : `allenamenti_${safeFrom}_${safeTo}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+  } catch (e) {
+    console.error(e);
+    alert("Errore export Excel");
+  }
+});
 
 // ================= EXPORT PDF =================
 exportPdfBtn?.addEventListener("click", async () => {
   try {
-    if (!window.jspdf?.jsPDF) {
-      alert("Libreria PDF non caricata. Controlla index.html.");
-      return;
-    }
-
     const { rows, fromDate, toDate } = await fetchExportRows();
+    if (!rows || rows.length === 0) return alert("Nessun dato da esportare");
 
-    if (!rows || rows.length === 0) {
-      alert("Nessun dato da esportare");
-      return;
-    }
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: "pt", format: "a4" });
 
-    exportAllenamentiToPDF(rows, { fromDate, toDate });
-  } catch (err) {
-    console.error(err);
-    alert("Errore durante l'export PDF");
+    const title = giornoSelezionato ? `Report Allenamenti (${fromDate})` : `Report Allenamenti (${monthLabel(currentMonth)})`;
+    const subtitle = `Periodo: ${fromDate} → ${toDate}`;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text(title, 40, 50);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.text(subtitle, 40, 70);
+
+    const headers = ["Data", "Ora", "Tipo", "Durata", "Partecipanti", "Trainer", ...(isAdmin ? ["Inserito da"] : [])];
+    const colWidths = isAdmin ? [70, 50, 140, 60, 80, 110, 90] : [70, 50, 160, 60, 80, 120];
+
+    let y = 95;
+    let x = 40;
+
+    doc.setFont("helvetica", "bold");
+    headers.forEach((h, i) => { doc.text(h, x, y); x += colWidths[i]; });
+    doc.setDrawColor(200);
+    doc.line(40, y + 6, 555, y + 6);
+
+    y += 24;
+    doc.setFont("helvetica", "normal");
+
+    const pageBottom = 800;
+
+    rows.forEach((a) => {
+      const row = [
+        a.data ? formatDate(a.data) : "",
+        a.ora_inizio || "",
+        a.tipo || "",
+        a.durata ? `${a.durata}m` : "-",
+        a.numero_partecipanti ?? "-",
+        a.persone || "-",
+        ...(isAdmin ? [a._full_name || "-"] : [])
+      ];
+
+      if (y > pageBottom) { doc.addPage(); y = 60; }
+
+      let xx = 40;
+      row.forEach((val, i) => {
+        const text = String(val ?? "");
+        const maxChars = Math.floor((colWidths[i] || 80) / 6);
+        const clipped = text.length > maxChars ? text.slice(0, maxChars - 1) + "…" : text;
+        doc.text(clipped, xx, y);
+        xx += colWidths[i];
+      });
+      y += 18;
+    });
+
+    const safeFrom = fromDate.replaceAll("-", "");
+    const safeTo = toDate.replaceAll("-", "");
+    const filename = giornoSelezionato ? `allenamenti_${safeFrom}.pdf` : `allenamenti_${safeFrom}_${safeTo}.pdf`;
+    doc.save(filename);
+  } catch (e) {
+    console.error(e);
+    alert("Errore export PDF");
   }
 });
-
-function exportAllenamentiToPDF(rows, { fromDate, toDate }) {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ unit: "pt", format: "a4" });
-
-  const margin = 40;
-  let y = 50;
-
-  const title = (fromDate === toDate)
-    ? `Report allenamenti - ${formatDate(fromDate)}`
-    : `Report allenamenti - ${formatDate(fromDate)} / ${formatDate(toDate)}`;
-
-  doc.setFontSize(16);
-  doc.text(title, margin, y);
-  y += 20;
-
-  const filtro = (isAdmin && selectedUserId !== "__all__")
-    ? `Filtro utente: ${selectedUserId}`
-    : (isAdmin ? "Filtro utente: Tutti" : "Filtro utente: (personale)");
-
-  doc.setFontSize(10);
-  doc.text(filtro, margin, y);
-  y += 18;
-
-  // intestazione tabella
-  doc.setFontSize(11);
-  doc.text("Data", margin, y);
-  doc.text("Ora", margin + 90, y);
-  doc.text("Tipo", margin + 150, y);
-  doc.text("Dur.", margin + 310, y);
-  doc.text("Part.", margin + 360, y);
-  if (isAdmin) doc.text("Inserito da", margin + 420, y);
-  y += 10;
-
-  doc.setLineWidth(0.5);
-  doc.line(margin, y, 555, y);
-  y += 16;
-
-  doc.setFontSize(10);
-
-  const pageBottom = 800;
-
-  rows.forEach((a) => {
-    const data = a.data ? formatDate(a.data) : "";
-    const ora = a.ora_inizio || "";
-    const tipo = (a.tipo || "").slice(0, 24);
-    const dur = a.durata ? `${a.durata}` : "-";
-    const part = a.numero_partecipanti ? `${a.numero_partecipanti}` : "-";
-    const who = isAdmin ? (a._full_name || "-") : "";
-
-    doc.text(data, margin, y);
-    doc.text(ora, margin + 90, y);
-    doc.text(tipo, margin + 150, y);
-    doc.text(dur, margin + 310, y);
-    doc.text(part, margin + 360, y);
-    if (isAdmin) doc.text(who.slice(0, 16), margin + 420, y);
-
-    y += 16;
-
-    if (y > pageBottom) {
-      doc.addPage();
-      y = 50;
-    }
-  });
-
-  const safeFrom = fromDate.replaceAll("-", "");
-  const safeTo = toDate.replaceAll("-", "");
-  const fileName = (fromDate === toDate)
-    ? `allenamenti_${safeFrom}.pdf`
-    : `allenamenti_${safeFrom}_${safeTo}.pdf`;
-
-  doc.save(fileName);
-}
