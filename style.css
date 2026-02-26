@@ -172,9 +172,20 @@ h3{ margin: 14px 0 10px; }
   user-select:none;
 }
 .calendar-day:hover{ background:#e0e7ff; }
+.calendar-day.has-workout:hover{ filter: brightness(0.97); }
 .calendar-day.has-workout{
-  background:#d1fae5;
   font-weight: 800;
+}
+
+/* Calendar color coding */
+.calendar-day.workout-sophie{
+  background:#dbeafe; /* blue */
+}
+.calendar-day.workout-vivienne{
+  background:#dcfce7; /* green */
+}
+.calendar-day.workout-both{
+  background: linear-gradient(135deg, #dbeafe 0 50%, #dcfce7 50% 100%);
 }
 .hint{
   margin-top: 10px;
@@ -275,4 +286,39 @@ h3{ margin: 14px 0 10px; }
 @media (min-width: 1024px){
   body{ padding: 20px; }
   .bottom-nav{ max-width: 520px; margin: 0 auto; border-radius: 16px 16px 0 0; }
+}
+
+
+/* ================= EXPORT OPTIONS ================= */
+#exportOptions{
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+}
+#exportOptions h4{ margin: 0 0 10px; }
+#exportOptions label{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+#exportOptions input[type="radio"]{
+  width: auto;
+  margin: 0;
+  padding: 0;
+}
+#customDates{
+  display:flex;
+  gap: 10px;
+  align-items:center;
+  flex-wrap: wrap;
+}
+#customDates input[type="date"]{
+  width: auto;
+  min-width: 160px;
+  margin: 0;
+}
+#applyExport{
+  width: auto;
 }
