@@ -27,9 +27,10 @@ const note = document.getElementById("note");
 const prevMonthBtn = document.getElementById("prevMonth");
 const nextMonthBtn = document.getElementById("nextMonth");
 
-const exportBtn = document.getElementById("exportExcelBtn");
+const exportExcelBtn = document.getElementById("exportExcelBtn");
+const exportPdfBtn = document.getElementById("exportPdfBtn");
 
-// Admin filter (opzionale: se non c'è, l'app funziona uguale)
+// Admin filter (opzionale)
 const userFilterSelect = document.getElementById("userFilter"); // <select>
 const userFilterWrap = document.getElementById("userFilterWrap"); // opzionale container
 
@@ -69,7 +70,7 @@ async function getIsAdmin() {
   return data?.role === "admin";
 }
 
-// Enrich senza dipendere dalla FK/embedded select
+// Enrich robusto: anche senza FK/embedded select
 async function enrichWithProfiles(rows) {
   const ids = Array.from(new Set((rows || []).map((r) => r.user_id).filter(Boolean)));
   if (ids.length === 0) return rows || [];
@@ -108,9 +109,7 @@ document.getElementById("registerBtn").onclick = async () => {
     email: emailInput.value,
     password: passwordInput.value,
     options: {
-      data: {
-        full_name
-      }
+      data: { full_name }
     }
   });
 
@@ -132,7 +131,6 @@ document.getElementById("logoutBtn").onclick = async () => {
   if (listaDiv) listaDiv.innerHTML = "";
   if (listaTitle) listaTitle.textContent = "Allenamenti";
 
-  // (opzionale) reset filtro
   if (userFilterSelect) userFilterSelect.value = "__all__";
   if (userFilterWrap) userFilterWrap.style.display = "none";
 
@@ -163,14 +161,12 @@ async function checkSession() {
       await populateUserFilter();
       userFilterSelect.onchange = async () => {
         selectedUserId = userFilterSelect.value || "__all__";
-        // reset vista giorno quando cambi filtro (più chiaro)
         giornoSelezionato = null;
         if (listaDiv) listaDiv.innerHTML = "";
         if (listaTitle) listaTitle.textContent = "Allenamenti";
         await caricaAllenamentiMese();
       };
     } else {
-      // Non-admin: nascondi filtro se esiste
       if (userFilterWrap) userFilterWrap.style.display = "none";
       userFilterSelect.innerHTML = "";
     }
@@ -178,6 +174,7 @@ async function checkSession() {
 
   await caricaAllenamentiMese();
 }
+
 checkSession();
 
 async function populateUserFilter() {
@@ -190,7 +187,6 @@ async function populateUserFilter() {
 
   if (error) {
     console.error("Errore caricamento utenti:", error);
-    // fallback: almeno "Tutti"
     userFilterSelect.innerHTML = `<option value="__all__">Tutti</option>`;
     selectedUserId = "__all__";
     return;
@@ -199,10 +195,8 @@ async function populateUserFilter() {
   const options = [];
   options.push(`<option value="__all__">Tutti</option>`);
 
-  // opzionale: mostra anche "Admin (solo miei)" come scelta rapida
-  if (currentUser?.id) {
-    options.push(`<option value="${currentUser.id}">Admin</option>`);
-  }
+  // scelta rapida: admin = solo miei
+  if (currentUser?.id) options.push(`<option value="${currentUser.id}">Admin</option>`);
 
   (data || []).forEach((p) => {
     const label = p.full_name || "(senza nome)";
@@ -210,8 +204,6 @@ async function populateUserFilter() {
   });
 
   userFilterSelect.innerHTML = options.join("\n");
-
-  // default: tutti
   selectedUserId = "__all__";
   userFilterSelect.value = "__all__";
 }
@@ -228,7 +220,7 @@ form.onsubmit = async (e) => {
     numero_partecipanti: numero_partecipanti.value || null,
     persone: persone.value || null,
     note: note.value || null
-    // user_id: non lo passiamo, lo mette il DB con default auth.uid()
+    // user_id: default auth.uid() nel DB
   };
 
   const { error } = await supabaseClient
@@ -247,10 +239,9 @@ async function caricaAllenamentiMese() {
   const start = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
   const end = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
 
-  // Provo embedded select (se hai FK), ma non ci conto: faccio enrich dopo
   let query = supabaseClient
     .from("allenamenti")
-    .select("*, profiles(full_name)")
+    .select("*")
     .gte("data", isoDate(start))
     .lte("data", isoDate(end));
 
@@ -267,7 +258,6 @@ async function caricaAllenamentiMese() {
     return;
   }
 
-  // Enrich robusto (anche se profiles non viene embedded)
   allenamentiMese = await enrichWithProfiles(data || []);
   renderCalendar();
 }
@@ -330,11 +320,11 @@ nextMonthBtn.onclick = () => {
   caricaAllenamentiMese();
 };
 
-// ================= LISTA (CARD MOBILE) =================
+// ================= LISTA =================
 async function caricaAllenamenti(data) {
   let query = supabaseClient
     .from("allenamenti")
-    .select("*, profiles(full_name)")
+    .select("*")
     .eq("data", data)
     .order("ora_inizio");
 
@@ -359,15 +349,13 @@ async function caricaAllenamenti(data) {
   }
 
   enriched.forEach(a => {
-    const who = (a.profiles?.full_name || a._full_name || "-");
+    const who = (a._full_name || "-");
 
     listaDiv.innerHTML += `
       <div class="table-row">
-
         <div>📅 <strong>Data:</strong> ${formatDate(a.data)}</div>
         <div>⏰ <strong>Ora:</strong> ${a.ora_inizio}</div>
         <div>🏋️ <strong>Tipo:</strong> ${a.tipo}</div>
-
         <div>🤝 <strong>Trainer:</strong> ${a.persone || "-"}</div>
         <div>👥 <strong>Partecipanti:</strong> ${a.numero_partecipanti || "-"}</div>
         <div>⏱ <strong>Durata:</strong> ${a.durata ? a.durata + " min" : "-"}</div>
@@ -380,7 +368,6 @@ async function caricaAllenamenti(data) {
           <button onclick="modificaAllenamento('${a.id}')">✏️</button>
           <button onclick="eliminaAllenamento('${a.id}')">🗑️</button>
         </div>
-
       </div>
     `;
   });
@@ -451,58 +438,63 @@ window.eliminaAllenamento = async function (id) {
   if (giornoSelezionato) await caricaAllenamenti(giornoSelezionato);
 };
 
-// ===============================
-// EXPORT EXCEL
-// ===============================
-exportBtn?.addEventListener("click", async () => {
+// ================= EXPORT COMMON =================
+function getExportRange() {
+  const monthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+  const monthEnd = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
+
+  const fromDate = giornoSelezionato || isoDate(monthStart);
+  const toDate = giornoSelezionato || isoDate(monthEnd);
+
+  return { fromDate, toDate };
+}
+
+async function fetchExportRows() {
+  const { fromDate, toDate } = getExportRange();
+
+  let query = supabaseClient
+    .from("allenamenti")
+    .select("*")
+    .gte("data", fromDate)
+    .lte("data", toDate)
+    .order("data", { ascending: true })
+    .order("ora_inizio", { ascending: true });
+
+  if (isAdmin && selectedUserId && selectedUserId !== "__all__") {
+    query = query.eq("user_id", selectedUserId);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const enriched = await enrichWithProfiles(data || []);
+  return { rows: enriched, fromDate, toDate };
+}
+
+// ================= EXPORT EXCEL =================
+exportExcelBtn?.addEventListener("click", async () => {
   try {
-    const monthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
-    const monthEnd = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
-
-    const fromDate = giornoSelezionato || isoDate(monthStart);
-    const toDate = giornoSelezionato || isoDate(monthEnd);
-
-    let query = supabaseClient
-      .from("allenamenti")
-      .select("*")
-      .gte("data", fromDate)
-      .lte("data", toDate)
-      .order("data", { ascending: true })
-      .order("ora_inizio", { ascending: true });
-
-    if (isAdmin && selectedUserId && selectedUserId !== "__all__") {
-      query = query.eq("user_id", selectedUserId);
-    }
-
-    const { data: rows, error } = await query;
-
-    if (error) {
-      console.error(error);
-      alert("Errore durante l'export");
+    if (typeof XLSX === "undefined") {
+      alert("Libreria XLSX non caricata. Controlla index.html.");
       return;
     }
+
+    const { rows, fromDate, toDate } = await fetchExportRows();
+
     if (!rows || rows.length === 0) {
       alert("Nessun dato da esportare");
       return;
     }
 
-    const enriched = await enrichWithProfiles(rows);
-
-    exportAllenamentiToExcel(enriched, { fromDate, toDate });
+    exportAllenamentiToExcel(rows, { fromDate, toDate });
   } catch (err) {
     console.error(err);
-    alert("Errore imprevisto durante l'export");
+    alert("Errore durante l'export Excel");
   }
 });
 
 function exportAllenamentiToExcel(rows, { fromDate, toDate }) {
-  if (typeof XLSX === "undefined") {
-    alert("Libreria XLSX non caricata. Controlla lo script in index.html.");
-    return;
-  }
-
   const formatted = rows.map((a) => {
-    const who = (a._full_name || "-");
     return {
       Data: a.data ? formatDate(a.data) : "",
       Ora: a.ora_inizio || "",
@@ -510,9 +502,8 @@ function exportAllenamentiToExcel(rows, { fromDate, toDate }) {
       Durata_min: a.durata ?? "",
       Partecipanti: a.numero_partecipanti ?? "",
       Trainer: a.persone ?? "",
-      Inserito_da: isAdmin ? who : "", // admin-only
-      Note: a.note ?? "",
-      ID: a.id ?? ""
+      Inserito_da: isAdmin ? (a._full_name || "-") : "",
+      Note: a.note ?? ""
     };
   });
 
@@ -526,15 +517,109 @@ function exportAllenamentiToExcel(rows, { fromDate, toDate }) {
   });
 
   const wb = XLSX.utils.book_new();
-  const sheetName = giornoSelezionato ? "Giorno" : "Periodo";
-  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  XLSX.utils.book_append_sheet(wb, ws, "Allenamenti");
 
   const safeFrom = fromDate.replaceAll("-", "");
   const safeTo = toDate.replaceAll("-", "");
 
-  const fileName = giornoSelezionato
+  const fileName = (fromDate === toDate)
     ? `allenamenti_${safeFrom}.xlsx`
     : `allenamenti_${safeFrom}_${safeTo}.xlsx`;
 
   XLSX.writeFile(wb, fileName);
+}
+
+// ================= EXPORT PDF =================
+exportPdfBtn?.addEventListener("click", async () => {
+  try {
+    if (!window.jspdf?.jsPDF) {
+      alert("Libreria PDF non caricata. Controlla index.html.");
+      return;
+    }
+
+    const { rows, fromDate, toDate } = await fetchExportRows();
+
+    if (!rows || rows.length === 0) {
+      alert("Nessun dato da esportare");
+      return;
+    }
+
+    exportAllenamentiToPDF(rows, { fromDate, toDate });
+  } catch (err) {
+    console.error(err);
+    alert("Errore durante l'export PDF");
+  }
+});
+
+function exportAllenamentiToPDF(rows, { fromDate, toDate }) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+
+  const margin = 40;
+  let y = 50;
+
+  const title = (fromDate === toDate)
+    ? `Report allenamenti - ${formatDate(fromDate)}`
+    : `Report allenamenti - ${formatDate(fromDate)} / ${formatDate(toDate)}`;
+
+  doc.setFontSize(16);
+  doc.text(title, margin, y);
+  y += 20;
+
+  const filtro = (isAdmin && selectedUserId !== "__all__")
+    ? `Filtro utente: ${selectedUserId}`
+    : (isAdmin ? "Filtro utente: Tutti" : "Filtro utente: (personale)");
+
+  doc.setFontSize(10);
+  doc.text(filtro, margin, y);
+  y += 18;
+
+  // intestazione tabella
+  doc.setFontSize(11);
+  doc.text("Data", margin, y);
+  doc.text("Ora", margin + 90, y);
+  doc.text("Tipo", margin + 150, y);
+  doc.text("Dur.", margin + 310, y);
+  doc.text("Part.", margin + 360, y);
+  if (isAdmin) doc.text("Inserito da", margin + 420, y);
+  y += 10;
+
+  doc.setLineWidth(0.5);
+  doc.line(margin, y, 555, y);
+  y += 16;
+
+  doc.setFontSize(10);
+
+  const pageBottom = 800;
+
+  rows.forEach((a) => {
+    const data = a.data ? formatDate(a.data) : "";
+    const ora = a.ora_inizio || "";
+    const tipo = (a.tipo || "").slice(0, 24);
+    const dur = a.durata ? `${a.durata}` : "-";
+    const part = a.numero_partecipanti ? `${a.numero_partecipanti}` : "-";
+    const who = isAdmin ? (a._full_name || "-") : "";
+
+    doc.text(data, margin, y);
+    doc.text(ora, margin + 90, y);
+    doc.text(tipo, margin + 150, y);
+    doc.text(dur, margin + 310, y);
+    doc.text(part, margin + 360, y);
+    if (isAdmin) doc.text(who.slice(0, 16), margin + 420, y);
+
+    y += 16;
+
+    if (y > pageBottom) {
+      doc.addPage();
+      y = 50;
+    }
+  });
+
+  const safeFrom = fromDate.replaceAll("-", "");
+  const safeTo = toDate.replaceAll("-", "");
+  const fileName = (fromDate === toDate)
+    ? `allenamenti_${safeFrom}.pdf`
+    : `allenamenti_${safeFrom}_${safeTo}.pdf`;
+
+  doc.save(fileName);
 }
