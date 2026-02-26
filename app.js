@@ -69,7 +69,11 @@ let giornoSelezionato = null;
 
 let currentUser = null;
 let isAdmin = false;
+
 let selectedUserId = "__all__"; // "__all__" = no filter
+
+// ✅ editing mode (modifica)
+let editingId = null;
 
 // ================= UTILS =================
 function isoDate(d) { return d.toISOString().split("T")[0]; }
@@ -118,6 +122,10 @@ async function enrichWithProfiles(rows) {
   return (rows || []).map(r => ({ ...r, _full_name: map.get(r.user_id) || null }));
 }
 
+function clearEditingMode() {
+  editingId = null;
+}
+
 // ================= AUTH UI =================
 document.getElementById("loginBtn").onclick = async () => {
   const { error } = await supabaseClient.auth.signInWithPassword({
@@ -143,6 +151,7 @@ document.getElementById("logoutBtn").onclick = async () => {
   await supabaseClient.auth.signOut();
   currentUser = null; isAdmin = false; selectedUserId = "__all__";
   allenamentiMese = []; giornoSelezionato = null;
+  clearEditingMode();
   listaDiv.innerHTML = ""; listaTitle.textContent = "Allenamenti";
   if (userFilterSelect) userFilterSelect.value = "__all__";
   if (userFilterWrap) userFilterWrap.style.display = "none";
@@ -211,18 +220,13 @@ async function checkSession() {
 }
 checkSession();
 
-// ================= INSERT =================
+// ================= INSERT / UPDATE =================
 form.onsubmit = async (e) => {
   e.preventDefault();
 
-  // session robusta (evita currentUser non aggiornato)
   const { data: { session }, error: sessErr } = await supabaseClient.auth.getSession();
-  if (sessErr) {
+  if (sessErr || !session?.user?.id) {
     console.error(sessErr);
-    alert("Errore sessione. Rifai login.");
-    return;
-  }
-  if (!session?.user?.id) {
     alert("Sessione non valida. Rifai login.");
     return;
   }
@@ -233,7 +237,7 @@ form.onsubmit = async (e) => {
     return;
   }
 
-  const allenamento = {
+  const payload = {
     user_id: session.user.id, // ✅ fondamentale per FK
     tipo: tipo.value,
     data: dataInput.value,
@@ -244,7 +248,29 @@ form.onsubmit = async (e) => {
     note: note.value || null
   };
 
-  const { error } = await supabaseClient.from("allenamenti").insert([allenamento]);
+  // ✅ se sto modificando, faccio UPDATE (non delete+insert)
+  if (editingId) {
+    const { error } = await supabaseClient
+      .from("allenamenti")
+      .update(payload)
+      .eq("id", editingId);
+
+    if (error) {
+      console.error(error);
+      alert(error.message);
+      return;
+    }
+
+    clearEditingMode();
+    form.reset();
+    await caricaAllenamentiMese();
+    if (giornoSelezionato) await caricaAllenamenti(giornoSelezionato);
+    alert("Allenamento aggiornato ✅");
+    return;
+  }
+
+  // ✅ insert normale
+  const { error } = await supabaseClient.from("allenamenti").insert([payload]);
   if (error) {
     console.error(error);
     alert(error.message);
@@ -299,7 +325,7 @@ function renderCalendar() {
     const dayRows = allenamentiMese.filter(a => a.data === dateStr);
     const hasWorkout = dayRows.length > 0;
 
-    // Color coding by people (persone + note)
+    // Color coding by people (persone + note) robusto
     const namesText = dayRows
       .map(r => `${r.persone || ""} ${r.note || ""}`)
       .join(" ")
@@ -333,7 +359,7 @@ window.selezionaGiorno = function (data) {
 prevMonthBtn.onclick = () => { currentMonth.setMonth(currentMonth.getMonth() - 1); caricaAllenamentiMese(); };
 nextMonthBtn.onclick = () => { currentMonth.setMonth(currentMonth.getMonth() + 1); caricaAllenamentiMese(); };
 
-// ================= LIST =================
+// ================= LIST + EDIT/DELETE =================
 async function caricaAllenamenti(data) {
   let query = supabaseClient
     .from("allenamenti")
@@ -348,10 +374,16 @@ async function caricaAllenamenti(data) {
 
   const enriched = await enrichWithProfiles(rows || []);
   listaDiv.innerHTML = "";
-  if (!enriched || enriched.length === 0) { listaDiv.innerHTML = "<p>Nessun allenamento</p>"; return; }
+
+  if (!enriched || enriched.length === 0) {
+    listaDiv.innerHTML = "<p>Nessun allenamento</p>";
+    return;
+  }
 
   enriched.forEach(a => {
     const who = (a._full_name || "-");
+    const canEdit = isAdmin || (currentUser && a.user_id === currentUser.id);
+
     listaDiv.innerHTML += `
       <div class="table-row">
         <div>📅 <strong>Data:</strong> ${formatDate(a.data)}</div>
@@ -362,10 +394,67 @@ async function caricaAllenamenti(data) {
         <div>⏱ <strong>Durata:</strong> ${a.durata ? a.durata + " min" : "-"}</div>
         ${isAdmin ? `<div>👤 <strong>Inserito da:</strong> ${who}</div>` : ""}
         <div>📝 <strong>Note:</strong> ${a.note || "-"}</div>
+
+        ${canEdit ? `
+          <div class="actions">
+            <button onclick="modificaAllenamento('${a.id}')">✏️ Modifica</button>
+            <button onclick="eliminaAllenamento('${a.id}')" class="btn-secondary">🗑 Elimina</button>
+          </div>
+        ` : ""}
       </div>
     `;
   });
 }
+
+window.eliminaAllenamento = async function (id) {
+  if (!confirm("Vuoi eliminare questo allenamento?")) return;
+
+  const { error } = await supabaseClient
+    .from("allenamenti")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    console.error(error);
+    alert(error.message);
+    return;
+  }
+
+  await caricaAllenamentiMese();
+  if (giornoSelezionato) await caricaAllenamenti(giornoSelezionato);
+};
+
+window.modificaAllenamento = async function (id) {
+  const { data, error } = await supabaseClient
+    .from("allenamenti")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (error) {
+    console.error(error);
+    alert(error.message);
+    return;
+  }
+
+  // set edit mode
+  editingId = id;
+
+  // riempi form
+  tipo.value = data.tipo || "";
+  dataInput.value = data.data || "";
+  ora_inizio.value = data.ora_inizio || "";
+  durata.value = data.durata || "";
+  numero_partecipanti.value = data.numero_partecipanti || "";
+  persone.value = data.persone || "";
+  note.value = data.note || "";
+
+  // porta l'utente dove vede il form (di solito dashboard)
+  showView("view-dashboard");
+  form.scrollIntoView?.({ behavior: "smooth", block: "start" });
+
+  alert("Modalità modifica: ora premi SALVA per aggiornare ✅");
+};
 
 // ================= DASHBOARD =================
 function updateDashboard() {
