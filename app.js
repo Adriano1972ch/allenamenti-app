@@ -290,7 +290,7 @@ function renderCalendar() {
   }
 }
 
-window.selezionaGiornowindow.selezionaGiorno = function (data) {
+window.selezionaGiorno = function (data) {
   giornoSelezionato = data;
   listaTitle.textContent = `Allenamenti del ${formatDate(data)}`;
   showView("view-list");
@@ -475,7 +475,7 @@ applyExportBtn?.addEventListener("click", async () => {
 });
 
 // ================= EXPORT EXCEL =================
-async function doExportExcel() {
+async async function doExportExcel() {
     try {
       if (typeof XLSX === "undefined") return alert("Libreria XLSX non caricata.");
       const { rows, fromDate, toDate } = await fetchExportRows();
