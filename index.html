@@ -1,42 +1,49 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Allenamenti</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <!-- PWA -->
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="icon-512.png">
-  <meta name="theme-color" content="#2563eb">
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icon-512.png" />
+  <meta name="theme-color" content="#2563eb" />
 
   <!-- Supabase -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-  <!-- CSS -->
-  <link rel="stylesheet" href="style.css">
+  <!-- Excel -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+  <!-- PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <link rel="stylesheet" href="style.css" />
 </head>
 
 <body>
-
   <!-- ================= AUTH ================= -->
   <div id="auth">
     <h2>Login / Registrazione</h2>
-
-    <input id="full_name" type="text" placeholder="Nome completo">
-    <input id="email" type="email" placeholder="Email">
-    <input id="password" type="password" placeholder="Password">
-
+    <input id="full_name" type="text" placeholder="Nome completo (solo registrazione)" />
+    <input id="email" type="email" placeholder="Email" />
+    <input id="password" type="password" placeholder="Password" />
     <button id="loginBtn">Login</button>
     <button id="registerBtn">Registrati</button>
   </div>
 
   <!-- ================= APP ================= -->
   <div id="app" style="display:none">
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="brand">Allenamenti</div>
+        <div id="whoami" class="whoami"></div>
+      </div>
+      <button id="logoutBtn" class="btn-secondary">Logout</button>
+    </header>
 
-    <button id="logoutBtn">Logout</button>
-
-    <!-- Filtro Admin (mostrato solo se admin da app.js) -->
+    <!-- Admin filter -->
     <div id="userFilterWrap" class="admin-filter" style="display:none">
       <label for="userFilter"><strong>Visualizza:</strong></label>
       <select id="userFilter">
@@ -44,70 +51,102 @@
       </select>
     </div>
 
-    <!-- FORM -->
-    <h2>Nuovo allenamento</h2>
-    <form id="form">
-      <input id="tipo" placeholder="Tipo allenamento" required>
+    <main class="views">
+      <!-- Dashboard -->
+      <section id="view-dashboard" class="view">
+        <h2 class="view-title">Dashboard</h2>
 
-      <div class="field">
-        <label for="data">Data</label>
-        <input id="data" type="date" required>
-      </div>
+        <div class="cards">
+          <div class="card">
+            <div class="card-title">Sessioni mese</div>
+            <div id="dashSessions" class="card-value">—</div>
+          </div>
+          <div class="card">
+            <div class="card-title">Ore totali</div>
+            <div id="dashHours" class="card-value">—</div>
+          </div>
+          <div class="card">
+            <div class="card-title">Partecipanti medi</div>
+            <div id="dashAvgParticipants" class="card-value">—</div>
+          </div>
+        </div>
 
-      <div class="field">
-        <label for="ora_inizio">Ora</label>
-        <input id="ora_inizio" type="time" required>
-      </div>
+        <div class="card wide">
+          <div class="card-title">Periodo</div>
+          <div id="dashPeriod" class="card-sub">—</div>
+          <div class="dash-actions">
+            <button id="dashGoCalendarBtn">Vai al calendario</button>
+            <button id="dashGoListBtn" class="btn-secondary">Vai alla lista</button>
+          </div>
+        </div>
+      </section>
 
-      <input id="durata" type="number" placeholder="Durata (min)">
-      <input id="numero_partecipanti" type="number" placeholder="Partecipanti">
-      <input id="persone" placeholder="Con chi">
-      <textarea id="note" placeholder="Note"></textarea>
+      <!-- Calendar -->
+      <section id="view-calendar" class="view" style="display:none">
+        <h2 class="view-title">Calendario</h2>
 
-      <button type="submit">➕ Aggiungi</button>
-    </form>
+        <div id="calendar">
+          <div class="calendar-header">
+            <button id="prevMonth" class="btn-round">‹</button>
+            <span id="calendarTitle"></span>
+            <button id="nextMonth" class="btn-round">›</button>
+          </div>
 
-    <!-- CALENDARIO -->
-    <h2>Calendario</h2>
-    <div id="calendar">
-      <div class="calendar-header">
-        <button id="prevMonth">‹</button>
-        <span id="calendarTitle"></span>
-        <button id="nextMonth">›</button>
-      </div>
+          <div class="calendar-weekdays">
+            <div>L</div><div>M</div><div>M</div><div>G</div><div>V</div><div>S</div><div>D</div>
+          </div>
 
-      <div class="calendar-weekdays">
-        <div>L</div><div>M</div><div>M</div><div>G</div><div>V</div><div>S</div><div>D</div>
-      </div>
+          <div id="calendar-grid"></div>
+        </div>
 
-      <div id="calendar-grid"></div>
-    </div>
+        <div class="hint">Tocca un giorno per vedere la lista e per esportare quel giorno.</div>
+      </section>
 
-    <!-- LISTA -->
-    <h2 id="lista-title">Allenamenti</h2>
-    <div id="lista"></div>
+      <!-- List + New -->
+      <section id="view-list" class="view" style="display:none">
+        <h2 class="view-title">Lista</h2>
 
-    <!-- EXPORT MENU (sotto la lista) -->
-    <div id="exportMenu" class="export-menu">
-      <button id="exportExcelBtn">📊 Esporta Excel</button>
-      <button id="exportPdfBtn">📄 Esporta PDF</button>
-    </div>
+        <h3>Nuovo allenamento</h3>
+        <form id="form" class="form">
+          <input id="tipo" placeholder="Tipo allenamento" required />
+          <div class="field">
+            <label for="data">Data</label>
+            <input id="data" type="date" required />
+          </div>
+          <div class="field">
+            <label for="ora_inizio">Ora</label>
+            <input id="ora_inizio" type="time" required />
+          </div>
+          <input id="durata" type="number" placeholder="Durata (min)" />
+          <input id="numero_partecipanti" type="number" placeholder="Partecipanti" />
+          <input id="persone" placeholder="Trainer / Con chi" />
+          <textarea id="note" placeholder="Note"></textarea>
+          <button type="submit">➕ Aggiungi</button>
+        </form>
 
+        <h2 id="lista-title">Allenamenti</h2>
+        <div id="lista"></div>
+
+        <div id="exportMenu" class="export-menu">
+          <button id="exportExcelBtn">📊 Esporta Excel</button>
+          <button id="exportPdfBtn" class="btn-secondary">📄 Esporta PDF</button>
+        </div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav">
+      <button class="nav-item" data-target="view-dashboard">🏠<span>Dashboard</span></button>
+      <button class="nav-item" data-target="view-calendar">📅<span>Calendario</span></button>
+      <button class="nav-item" data-target="view-list">📋<span>Lista</span></button>
+    </nav>
   </div>
 
-  <!-- Librerie -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-
-  <!-- App -->
   <script src="app.js"></script>
 
-  <!-- Service Worker -->
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js');
     }
   </script>
-
 </body>
 </html>
