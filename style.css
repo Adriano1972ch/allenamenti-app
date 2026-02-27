@@ -177,15 +177,18 @@ h3{ margin: 14px 0 10px; }
   font-weight: 800;
 }
 
-/* Calendar color coding */
+/* Calendar color coding (match legend dots) */
 .calendar-day.workout-sophie{
-  background:#dbeafe; /* blue */
+  background:#2563eb; /* Sophie */
+  color:#fff;
 }
 .calendar-day.workout-vivienne{
-  background:#dcfce7; /* green */
+  background:#16a34a; /* Vivienne */
+  color:#fff;
 }
 .calendar-day.workout-both{
-  background: linear-gradient(135deg, #dbeafe 0 50%, #dcfce7 50% 100%);
+  background: linear-gradient(135deg, #2563eb 0 50%, #16a34a 50% 100%);
+  color:#fff;
 }
 .hint{
   margin-top: 10px;
