@@ -728,3 +728,42 @@ exportPdfBtn?.addEventListener("click", async () => {
     alert("Errore export PDF");
   }
 });
+
+/* ================= I18N ================= */
+
+const SUPPORTED_LANGS = ["it", "de", "en", "sk"];
+const FALLBACK_LANG = "en";
+
+const translations = {
+  it: { dashboard:"Dashboard", calendar:"Calendario", list:"Lista", logout:"Logout" },
+  en: { dashboard:"Dashboard", calendar:"Calendar", list:"List", logout:"Logout" },
+  de: { dashboard:"Dashboard", calendar:"Kalender", list:"Liste", logout:"Abmelden" },
+  sk: { dashboard:"Prehľad", calendar:"Kalendár", list:"Zoznam", logout:"Odhlásiť sa" }
+};
+
+function detectLanguage() {
+  const langs = navigator.languages || [navigator.language];
+  for (let l of langs) {
+    l = l.toLowerCase();
+    if (SUPPORTED_LANGS.includes(l)) return l;
+    const base = l.split("-")[0];
+    if (SUPPORTED_LANGS.includes(base)) return base;
+  }
+  return FALLBACK_LANG;
+}
+
+const currentLang = detectLanguage();
+const t = translations[currentLang];
+document.documentElement.lang = currentLang;
+
+document.addEventListener("DOMContentLoaded", () => {
+  const dash = document.querySelector('[data-target="view-dashboard"] span');
+  const cal = document.querySelector('[data-target="view-calendar"] span');
+  const list = document.querySelector('[data-target="view-list"] span');
+  const logout = document.getElementById("logoutBtn");
+
+  if (dash) dash.innerText = t.dashboard;
+  if (cal) cal.innerText = t.calendar;
+  if (list) list.innerText = t.list;
+  if (logout) logout.innerText = t.logout;
+});
