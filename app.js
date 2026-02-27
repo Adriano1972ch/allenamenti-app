@@ -82,7 +82,7 @@ function formatDate(dateStr) {
   return `${d}.${m}.${y}`;
 }
 function monthLabel(dateObj) {
-  return dateObj.toLocaleDateString("it-IT", { month: "long", year: "numeric" });
+  return dateObj.toLocaleDateString(currentLang, { month: "long", year: "numeric" });
 }
 function safeNumber(v) {
   const n = Number(v);
@@ -152,7 +152,7 @@ document.getElementById("logoutBtn").onclick = async () => {
   currentUser = null; isAdmin = false; selectedUserId = "__all__";
   allenamentiMese = []; giornoSelezionato = null;
   clearEditingMode();
-  listaDiv.innerHTML = ""; listaTitle.textContent = "Allenamenti";
+  listaDiv.innerHTML = ""; listaTitle.textContent = tr("list.workouts");
   if (userFilterSelect) userFilterSelect.value = "__all__";
   if (userFilterWrap) userFilterWrap.style.display = "none";
   authDiv.style.display = "block";
@@ -192,7 +192,7 @@ async function populateUserFilter() {
     selectedUserId = userFilterSelect.value || "__all__";
     giornoSelezionato = null;
     listaDiv.innerHTML = "";
-    listaTitle.textContent = "Allenamenti";
+    listaTitle.textContent = tr("list.workouts");
     await caricaAllenamentiMese();
   };
 }
@@ -351,7 +351,7 @@ function renderCalendar() {
 
 window.selezionaGiorno = function (data) {
   giornoSelezionato = data;
-  listaTitle.textContent = `Allenamenti del ${formatDate(data)}`;
+  listaTitle.textContent = tr("list.workoutsOf", { date: formatDate(data) });
   showView("view-list");
   caricaAllenamenti(data);
 };
@@ -730,40 +730,272 @@ exportPdfBtn?.addEventListener("click", async () => {
 });
 
 /* ================= I18N ================= */
-
 const SUPPORTED_LANGS = ["it", "de", "en", "sk"];
 const FALLBACK_LANG = "en";
 
-const translations = {
-  it: { dashboard:"Dashboard", calendar:"Calendario", list:"Lista", logout:"Logout" },
-  en: { dashboard:"Dashboard", calendar:"Calendar", list:"List", logout:"Logout" },
-  de: { dashboard:"Dashboard", calendar:"Kalender", list:"Liste", logout:"Abmelden" },
-  sk: { dashboard:"Prehľad", calendar:"Kalendár", list:"Zoznam", logout:"Odhlásiť sa" }
+const I18N = {
+  it: {
+    "app.title": "Allenamenti",
+    "app.brand": "Allenamenti",
+    "auth.title": "Login / Registrazione",
+    "auth.fullNamePh": "Nome completo (solo registrazione)",
+    "auth.emailPh": "Email",
+    "auth.passwordPh": "Password",
+    "auth.loginBtn": "Login",
+    "auth.registerBtn": "Registrati",
+    "auth.logoutBtn": "Logout",
+    "admin.viewAs": "Visualizza:",
+    "admin.all": "Tutti",
+    "nav.dashboard": "Dashboard",
+    "nav.calendar": "Calendario",
+    "nav.list": "Lista",
+    "dash.sessionsMonth": "Sessioni mese",
+    "dash.totalHours": "Ore totali",
+    "dash.avgParticipants": "Partecipanti medi",
+    "dash.period": "Periodo",
+    "dash.goCalendar": "Vai al calendario",
+    "dash.goList": "Vai alla lista",
+    "cal.hint": "Tocca un giorno per visualizzare gli allenamenti.",
+    "people.sophie": "Sophie",
+    "people.vivienne": "Vivienne",
+    "people.both": "Entrambe",
+    "list.newWorkout": "Nuovo allenamento",
+    "list.workouts": "Allenamenti",
+    "list.workoutsOf": "Allenamenti del {date}",
+    "form.typePh": "Tipo allenamento",
+    "form.date": "Data",
+    "form.time": "Ora",
+    "form.durationPh": "Durata (min)",
+    "form.participantsPh": "Partecipanti",
+    "form.withWhomPh": "Trainer / Con chi",
+    "form.notesPh": "Note",
+    "form.addBtn": "➕ Aggiungi",
+    "export.excel": "📊 Esporta Excel",
+    "export.pdf": "📄 Esporta PDF",
+    "export.title": "Esporta:",
+    "export.month": "Mese",
+    "export.monthLabel": "Mese:",
+    "export.custom": "Periodo personalizzato",
+    "export.from": "Dal:",
+    "export.to": "Al:",
+    "export.apply": "Applica",
+    "weekday.mon": "L",
+    "weekday.tue": "M",
+    "weekday.wed": "M",
+    "weekday.thu": "G",
+    "weekday.fri": "V",
+    "weekday.sat": "S",
+    "weekday.sun": "D",
+    "alerts.workoutUpdated": "Allenamento aggiornato ✅"
+  },
+  en: {
+    "app.title": "Workouts",
+    "app.brand": "Workouts",
+    "auth.title": "Login / Register",
+    "auth.fullNamePh": "Full name (register only)",
+    "auth.emailPh": "Email",
+    "auth.passwordPh": "Password",
+    "auth.loginBtn": "Login",
+    "auth.registerBtn": "Register",
+    "auth.logoutBtn": "Logout",
+    "admin.viewAs": "View:",
+    "admin.all": "All",
+    "nav.dashboard": "Dashboard",
+    "nav.calendar": "Calendar",
+    "nav.list": "List",
+    "dash.sessionsMonth": "Sessions this month",
+    "dash.totalHours": "Total hours",
+    "dash.avgParticipants": "Average participants",
+    "dash.period": "Period",
+    "dash.goCalendar": "Go to calendar",
+    "dash.goList": "Go to list",
+    "cal.hint": "Tap a day to view workouts.",
+    "people.sophie": "Sophie",
+    "people.vivienne": "Vivienne",
+    "people.both": "Both",
+    "list.newWorkout": "New workout",
+    "list.workouts": "Workouts",
+    "list.workoutsOf": "Workouts on {date}",
+    "form.typePh": "Workout type",
+    "form.date": "Date",
+    "form.time": "Time",
+    "form.durationPh": "Duration (min)",
+    "form.participantsPh": "Participants",
+    "form.withWhomPh": "Trainer / With whom",
+    "form.notesPh": "Notes",
+    "form.addBtn": "➕ Add",
+    "export.excel": "📊 Export Excel",
+    "export.pdf": "📄 Export PDF",
+    "export.title": "Export:",
+    "export.month": "Month",
+    "export.monthLabel": "Month:",
+    "export.custom": "Custom period",
+    "export.from": "From:",
+    "export.to": "To:",
+    "export.apply": "Apply",
+    "weekday.mon": "M",
+    "weekday.tue": "T",
+    "weekday.wed": "W",
+    "weekday.thu": "T",
+    "weekday.fri": "F",
+    "weekday.sat": "S",
+    "weekday.sun": "S",
+    "alerts.workoutUpdated": "Workout updated ✅"
+  },
+  de: {
+    "app.title": "Training",
+    "app.brand": "Training",
+    "auth.title": "Login / Registrierung",
+    "auth.fullNamePh": "Vollständiger Name (nur Registrierung)",
+    "auth.emailPh": "E-Mail",
+    "auth.passwordPh": "Passwort",
+    "auth.loginBtn": "Login",
+    "auth.registerBtn": "Registrieren",
+    "auth.logoutBtn": "Abmelden",
+    "admin.viewAs": "Anzeigen:",
+    "admin.all": "Alle",
+    "nav.dashboard": "Dashboard",
+    "nav.calendar": "Kalender",
+    "nav.list": "Liste",
+    "dash.sessionsMonth": "Sitzungen im Monat",
+    "dash.totalHours": "Gesamtstunden",
+    "dash.avgParticipants": "Ø Teilnehmer",
+    "dash.period": "Zeitraum",
+    "dash.goCalendar": "Zum Kalender",
+    "dash.goList": "Zur Liste",
+    "cal.hint": "Tippe auf einen Tag, um Trainings zu sehen.",
+    "people.sophie": "Sophie",
+    "people.vivienne": "Vivienne",
+    "people.both": "Beide",
+    "list.newWorkout": "Neues Training",
+    "list.workouts": "Trainings",
+    "list.workoutsOf": "Trainings am {date}",
+    "form.typePh": "Trainingstyp",
+    "form.date": "Datum",
+    "form.time": "Uhrzeit",
+    "form.durationPh": "Dauer (Min)",
+    "form.participantsPh": "Teilnehmer",
+    "form.withWhomPh": "Trainer / Mit wem",
+    "form.notesPh": "Notizen",
+    "form.addBtn": "➕ Hinzufügen",
+    "export.excel": "📊 Excel exportieren",
+    "export.pdf": "📄 PDF exportieren",
+    "export.title": "Export:",
+    "export.month": "Monat",
+    "export.monthLabel": "Monat:",
+    "export.custom": "Benutzerdefinierter Zeitraum",
+    "export.from": "Von:",
+    "export.to": "Bis:",
+    "export.apply": "Anwenden",
+    "weekday.mon": "M",
+    "weekday.tue": "D",
+    "weekday.wed": "M",
+    "weekday.thu": "D",
+    "weekday.fri": "F",
+    "weekday.sat": "S",
+    "weekday.sun": "S",
+    "alerts.workoutUpdated": "Training aktualisiert ✅"
+  },
+  sk: {
+    "app.title": "Tréningy",
+    "app.brand": "Tréningy",
+    "auth.title": "Prihlásenie / Registrácia",
+    "auth.fullNamePh": "Celé meno (len registrácia)",
+    "auth.emailPh": "Email",
+    "auth.passwordPh": "Heslo",
+    "auth.loginBtn": "Prihlásiť sa",
+    "auth.registerBtn": "Registrovať sa",
+    "auth.logoutBtn": "Odhlásiť sa",
+    "admin.viewAs": "Zobraziť:",
+    "admin.all": "Všetci",
+    "nav.dashboard": "Prehľad",
+    "nav.calendar": "Kalendár",
+    "nav.list": "Zoznam",
+    "dash.sessionsMonth": "Tréningy tento mesiac",
+    "dash.totalHours": "Celkové hodiny",
+    "dash.avgParticipants": "Priemer účastníkov",
+    "dash.period": "Obdobie",
+    "dash.goCalendar": "Do kalendára",
+    "dash.goList": "Do zoznamu",
+    "cal.hint": "Ťukni na deň pre zobrazenie tréningov.",
+    "people.sophie": "Sophie",
+    "people.vivienne": "Vivienne",
+    "people.both": "Obe",
+    "list.newWorkout": "Nový tréning",
+    "list.workouts": "Tréningy",
+    "list.workoutsOf": "Tréningy dňa {date}",
+    "form.typePh": "Typ tréningu",
+    "form.date": "Dátum",
+    "form.time": "Čas",
+    "form.durationPh": "Trvanie (min)",
+    "form.participantsPh": "Účastníci",
+    "form.withWhomPh": "Tréner / S kým",
+    "form.notesPh": "Poznámky",
+    "form.addBtn": "➕ Pridať",
+    "export.excel": "📊 Exportovať Excel",
+    "export.pdf": "📄 Exportovať PDF",
+    "export.title": "Export:",
+    "export.month": "Mesiac",
+    "export.monthLabel": "Mesiac:",
+    "export.custom": "Vlastné obdobie",
+    "export.from": "Od:",
+    "export.to": "Do:",
+    "export.apply": "Použiť",
+    "weekday.mon": "P",
+    "weekday.tue": "U",
+    "weekday.wed": "S",
+    "weekday.thu": "Š",
+    "weekday.fri": "P",
+    "weekday.sat": "S",
+    "weekday.sun": "N",
+    "alerts.workoutUpdated": "Tréning aktualizovaný ✅"
+  }
 };
 
 function detectLanguage() {
   const langs = navigator.languages || [navigator.language];
   for (let l of langs) {
-    l = l.toLowerCase();
-    if (SUPPORTED_LANGS.includes(l)) return l;
+    l = (l || "").toLowerCase();
     const base = l.split("-")[0];
+    if (SUPPORTED_LANGS.includes(l)) return l;
     if (SUPPORTED_LANGS.includes(base)) return base;
   }
   return FALLBACK_LANG;
 }
 
 const currentLang = detectLanguage();
-const t = translations[currentLang];
-document.documentElement.lang = currentLang;
+function tr(key, vars = {}) {
+  const dict = I18N[currentLang] || I18N[FALLBACK_LANG];
+  let s = dict[key] || (I18N[FALLBACK_LANG] && I18N[FALLBACK_LANG][key]) || key;
+  for (const [k, v] of Object.entries(vars)) s = s.replaceAll(`{${k}}`, String(v));
+  return s;
+}
 
-document.addEventListener("DOMContentLoaded", () => {
-  const dash = document.querySelector('[data-target="view-dashboard"] span');
-  const cal = document.querySelector('[data-target="view-calendar"] span');
-  const list = document.querySelector('[data-target="view-list"] span');
-  const logout = document.getElementById("logoutBtn");
+function applyTranslations() {
+  document.documentElement.lang = currentLang;
 
-  if (dash) dash.innerText = t.dashboard;
-  if (cal) cal.innerText = t.calendar;
-  if (list) list.innerText = t.list;
-  if (logout) logout.innerText = t.logout;
-});
+  // text nodes
+  document.querySelectorAll("[data-i18n]").forEach(el => {
+    const key = el.getAttribute("data-i18n");
+    if (key) el.textContent = tr(key);
+  });
+
+  // placeholders
+  document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
+    const key = el.getAttribute("data-i18n-placeholder");
+    if (key) el.setAttribute("placeholder", tr(key));
+  });
+
+  // document title
+  const titleEl = document.querySelector("title[data-i18n]");
+  if (titleEl) document.title = tr(titleEl.getAttribute("data-i18n"));
+}
+
+// translate known alerts without rewriting the whole file
+const __nativeAlert = window.alert.bind(window);
+window.alert = (msg) => {
+  if (msg === "Allenamento aggiornato ✅") return __nativeAlert(tr("alerts.workoutUpdated"));
+  return __nativeAlert(msg);
+};
+
+document.addEventListener("DOMContentLoaded", applyTranslations);
