@@ -65,26 +65,9 @@ h3{ margin: 14px 0 10px; }
   flex-direction:column;
 }
 
-/* ================= ADMIN FILTER ================= */
-.admin-filter{
-  margin: 10px 0 14px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  background: var(--card);
-}
-.admin-filter label{ margin:0; font-weight: 700; }
-.admin-filter select{ max-width: 260px; margin: 0; }
-
 /* ================= VIEWS ================= */
 .views{
-  padding-bottom: 84px; /* space for bottom nav */
-}
-.view-title{
-  margin-top: 8px;
+  padding-bottom: 100px; /* spazio extra per bottom nav */
 }
 
 /* ================= DASHBOARD ================= */
@@ -172,69 +155,23 @@ h3{ margin: 14px 0 10px; }
   user-select:none;
 }
 .calendar-day:hover{ background:#e0e7ff; }
-.calendar-day.has-workout:hover{ filter: brightness(0.97); }
+.calendar-day.has-workout:hover{ filter: brightness(0.95); }
 .calendar-day.has-workout{
   font-weight: 800;
 }
 
 /* Calendar color coding (match legend dots) */
 .calendar-day.workout-sophie{
-  background:#2563eb; /* Sophie */
+  background:#2563eb;
   color:#fff;
 }
 .calendar-day.workout-vivienne{
-  background:#16a34a; /* Vivienne */
+  background:#16a34a;
   color:#fff;
 }
 .calendar-day.workout-both{
   background: linear-gradient(135deg, #2563eb 0 50%, #16a34a 50% 100%);
   color:#fff;
-}
-.hint{
-  margin-top: 10px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-/* ================= FORM ================= */
-.form{
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 14px;
-}
-.field{
-  display:flex;
-  flex-direction:column;
-  gap: 6px;
-}
-.field label{
-  font-size: .95rem;
-  font-weight: 700;
-  color: #333;
-}
-
-/* ================= LIST ================= */
-#lista{
-  margin-top: 12px;
-  display: grid;
-  gap: 10px;
-}
-.table-row{
-  background: var(--card);
-  padding: 12px;
-  border-radius: 14px;
-  border: 1px solid var(--border);
-  display: grid;
-  gap: 6px;
-}
-.actions{
-  display:flex;
-  gap: 10px;
-}
-.actions button{
-  flex:1;
-  margin:0;
 }
 
 /* ================= EXPORT MENU ================= */
@@ -248,6 +185,35 @@ h3{ margin: 14px 0 10px; }
   margin: 0;
 }
 
+/* ================= EXPORT OPTIONS ================= */
+#exportOptions{
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 120px; /* FIX MOBILE: evita sovrapposizione con bottom-nav */
+}
+
+#exportOptions h4{ margin: 0 0 10px; }
+
+#exportOptions label{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+#customDates{
+  display:flex;
+  gap: 10px;
+  align-items:center;
+  flex-wrap: wrap;
+}
+
+#applyExport{
+  width: auto;
+}
+
 /* ================= BOTTOM NAV ================= */
 .bottom-nav{
   position: fixed;
@@ -259,7 +225,9 @@ h3{ margin: 14px 0 10px; }
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   padding: 8px 10px;
+  z-index: 999;
 }
+
 .nav-item{
   background: transparent;
   color: var(--text);
@@ -273,91 +241,17 @@ h3{ margin: 14px 0 10px; }
   gap: 4px;
   margin: 0;
 }
+
 .nav-item span{
   font-size: 12px;
   font-weight: 700;
   color: var(--muted);
 }
+
 .nav-item.active{
   background: #eef2ff;
 }
+
 .nav-item.active span{
   color: var(--text);
 }
-
-/* ================= DESKTOP ================= */
-@media (min-width: 1024px){
-  body{ padding: 20px; }
-  .bottom-nav{ max-width: 520px; margin: 0 auto; border-radius: 16px 16px 0 0; }
-}
-
-
-/* ================= EXPORT OPTIONS ================= */
-#exportOptions{
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 14px;
-}
-#exportOptions h4{ margin: 0 0 10px; }
-#exportOptions label{
-  display:flex;
-  align-items:center;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-#exportOptions input[type="radio"]{
-  width: auto;
-  margin: 0;
-  padding: 0;
-}
-#customDates{
-  display:flex;
-  gap: 10px;
-  align-items:center;
-  flex-wrap: wrap;
-}
-#customDates input[type="date"]{
-  width: auto;
-  min-width: 160px;
-  margin: 0;
-}
-#applyExport{
-  width: auto;
-}
-/* ===== Legend (calendar colors) ===== */
-.hint-row{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.legend{
-  display:flex;
-  gap: 12px;
-  align-items:center;
-  flex-wrap: wrap;
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.legend-item{
-  display:flex;
-  align-items:center;
-  gap: 6px;
-  white-space: nowrap;
-}
-
-.dot{
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  display:inline-block;
-  border: 1px solid rgba(0,0,0,.12);
-}
-
-.dot-sophie{ background:#2563eb; }
-.dot-vivienne{ background:#16a34a; }
-.dot-both{ background: linear-gradient(135deg, #2563eb 0 50%, #16a34a 50% 100%); }
