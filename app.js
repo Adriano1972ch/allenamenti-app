@@ -1,4 +1,4 @@
- // =======================
+// =======================
 // SUPABASE CONFIG
 // =======================
 const SUPABASE_URL = "https://sebcxlpyqehsbgyalzmz.supabase.co";
@@ -650,10 +650,8 @@ async function doExportPdf() {
     if (!rows || rows.length === 0) return alert("Nessun dato da esportare");
 
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+    const doc = new jsPDF({ unit: "pt", format: "a4" });
 
-    const pageW = doc.internal.pageSize.getWidth();
-    const pageH = doc.internal.pageSize.getHeight();
     const title = giornoSelezionato
       ? `Report Allenamenti (${fromDate})`
       : `Report Allenamenti (${monthLabel(currentMonth)})`;
@@ -661,36 +659,27 @@ async function doExportPdf() {
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(16);
-    doc.text(title, pageW / 2, 50, { align: "center" });
+    doc.text(title, 40, 50);
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(11);
-    doc.text(subtitle, pageW / 2, 70, { align: "center" });
+    doc.text(subtitle, 40, 70);
 
     const headers = ["Data", "Ora", "Tipo", "Durata", "Partecipanti", "Trainer", ...(isAdmin ? ["Inserito da"] : [])];
-
-    // Margini / dimensioni pagina (dinamiche per portrait/landscape)
-    const marginX = 40;
-    const tableRight = pageW - marginX;
-    const pageBottom = pageH - 55;
-
-    // Colonne ottimizzate per A4 landscape
-    const colWidths = isAdmin
-      ? [65, 50, 200, 60, 80, 150, 100]
-      : [65, 50, 240, 60, 80, 170];
-
-    function drawTableHeader(yPos) {
-      let xPos = marginX;
-      doc.setFont("helvetica", "bold");
-      headers.forEach((h, i) => { doc.text(h, xPos, yPos); xPos += colWidths[i]; });
-      doc.setDrawColor(200);
-      doc.line(marginX, yPos + 6, tableRight, yPos + 6);
-      doc.setFont("helvetica", "normal");
-      return yPos + 24;
-    }
+    const colWidths = isAdmin ? [70, 50, 140, 60, 80, 110, 90] : [70, 50, 160, 60, 80, 120];
 
     let y = 95;
-    y = drawTableHeader(y);
+    let x = 40;
+
+    doc.setFont("helvetica", "bold");
+    headers.forEach((h, i) => { doc.text(h, x, y); x += colWidths[i]; });
+    doc.setDrawColor(200);
+    doc.line(40, y + 6, 555, y + 6);
+
+    y += 24;
+    doc.setFont("helvetica", "normal");
+
+    const pageBottom = 800;
 
     rows.forEach((a) => {
       const row = [
@@ -703,22 +692,19 @@ async function doExportPdf() {
         ...(isAdmin ? [a._full_name || "-"] : [])
       ];
 
-      if (y > pageBottom) {
-        doc.addPage();
-        y = 60;
-        y = drawTableHeader(y);
-      }
+      if (y > pageBottom) { doc.addPage(); y = 60; }
 
-      let xx = marginX;
+      let xx = 40;
       row.forEach((val, i) => {
         const text = String(val ?? "");
-        const approxChars = Math.max(3, Math.floor(((colWidths[i] || 80) - 6) / 5.2));
-        const clipped = text.length > approxChars ? text.slice(0, approxChars - 1) + "…" : text;
+        const maxChars = Math.floor((colWidths[i] || 80) / 6);
+        const clipped = text.length > maxChars ? text.slice(0, maxChars - 1) + "…" : text;
         doc.text(clipped, xx, y);
         xx += colWidths[i];
       });
       y += 18;
     });
+
     const safeFrom = fromDate.replaceAll("-", "");
     const safeTo = toDate.replaceAll("-", "");
     const filename = giornoSelezionato ? `allenamenti_${safeFrom}.pdf` : `allenamenti_${safeFrom}_${safeTo}.pdf`;
