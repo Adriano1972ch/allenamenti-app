@@ -245,3 +245,38 @@ exportPdfBtn.addEventListener("click", async () => {
 
   doc.save("allenamenti.pdf");
 });
+// ================= AUTH =================
+loginBtn.addEventListener("click", async () => {
+  const email = emailInput.value.trim();
+  const password = passwordInput.value.trim();
+
+  const { data, error } = await supabaseClient.auth.signInWithPassword({
+    email,
+    password
+  });
+
+  if (error) return alert(error.message);
+
+  currentUser = data.user;
+  await bootstrap();
+});
+
+registerBtn.addEventListener("click", async () => {
+  const email = emailInput.value.trim();
+  const password = passwordInput.value.trim();
+
+  const { data, error } = await supabaseClient.auth.signUp({
+    email,
+    password
+  });
+
+  if (error) return alert(error.message);
+
+  alert("Registrazione completata. Controlla email se richiesta.");
+});
+
+logoutBtn.addEventListener("click", async () => {
+  await supabaseClient.auth.signOut();
+  currentUser = null;
+  showAuth();
+});
