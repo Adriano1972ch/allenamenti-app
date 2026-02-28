@@ -223,7 +223,7 @@ async function checkSession() {
   }
 
   await caricaAllenamentiMese();
-  showView("view-list");
+  showView("view-dashboard");
 }
 checkSession();
 
