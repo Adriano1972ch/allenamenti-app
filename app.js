@@ -663,39 +663,86 @@ async function doExportPdf() {
     const { rows, fromDate, toDate } = await fetchExportRows();
     if (!rows || rows.length === 0) return alert("Nessun dato da esportare");
 
+    // PDF in ORIZZONTALE (landscape)
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ unit: "pt", format: "a4" });
+    const doc = new jsPDF({
+      orientation: "landscape",
+      unit: "pt",
+      format: "a4"
+    });
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+
+    const marginX = 40;
+    const marginTop = 50;
+    const marginBottom = 40;
 
     const title = giornoSelezionato
       ? `Report Allenamenti (${fromDate})`
       : `Report Allenamenti (${monthLabel(currentMonth)})`;
     const subtitle = `Periodo: ${fromDate} → ${toDate}`;
 
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(16);
-    doc.text(title, 40, 50);
+    const headers = [
+      "Data",
+      "Ora",
+      "Tipo",
+      "Durata",
+      "Partecipanti",
+      "Trainer",
+      ...(isAdmin ? ["Inserito da"] : [])
+    ];
 
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(11);
-    doc.text(subtitle, 40, 70);
+    // Larghezze colonne calibrate per A4 landscape (unità: pt)
+    // Area utile: pageWidth - 2*marginX
+    const colWidths = isAdmin
+      ? [80, 55, 210, 65, 90, 120, 142]   // somma = 762
+      : [85, 55, 260, 70, 100, 192];      // somma = 762
 
-    const headers = ["Data", "Ora", "Tipo", "Durata", "Partecipanti", "Trainer", ...(isAdmin ? ["Inserito da"] : [])];
-    const colWidths = isAdmin ? [70, 50, 140, 60, 80, 110, 90] : [70, 50, 160, 60, 80, 120];
+    function drawHeader() {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
+      doc.text(title, marginX, marginTop);
 
-    let y = 95;
-    let x = 40;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+      doc.text(subtitle, marginX, marginTop + 20);
+    }
 
-    doc.setFont("helvetica", "bold");
-    headers.forEach((h, i) => { doc.text(h, x, y); x += colWidths[i]; });
-    doc.setDrawColor(200);
-    doc.line(40, y + 6, 555, y + 6);
+    function drawTableHeader(y) {
+      let x = marginX;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      headers.forEach((h, i) => {
+        doc.text(String(h), x, y);
+        x += colWidths[i];
+      });
 
-    y += 24;
-    doc.setFont("helvetica", "normal");
+      doc.setDrawColor(200);
+      doc.line(marginX, y + 6, pageWidth - marginX, y + 6);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+    }
 
-    const pageBottom = 800;
+    // Prima pagina
+    drawHeader();
+
+    let y = marginTop + 45;
+    drawTableHeader(y);
+
+    y += 22;
+    const pageBottom = pageHeight - marginBottom;
 
     rows.forEach((a) => {
+      // Se serve nuova pagina
+      if (y > pageBottom) {
+        doc.addPage();
+        drawHeader();
+        y = marginTop + 45;
+        drawTableHeader(y);
+        y += 22;
+      }
+
       const row = [
         a.data ? formatDate(a.data) : "",
         a.ora_inizio || "",
@@ -706,22 +753,29 @@ async function doExportPdf() {
         ...(isAdmin ? [a._full_name || "-"] : [])
       ];
 
-      if (y > pageBottom) { doc.addPage(); y = 60; }
+      let x = marginX;
 
-      let xx = 40;
       row.forEach((val, i) => {
+        const cellWidth = colWidths[i] || 80;
         const text = String(val ?? "");
-        const maxChars = Math.floor((colWidths[i] || 80) / 6);
+
+        // Stima semplice: ~5.2pt per carattere a font 10 (ok per clipping rapido)
+        const maxChars = Math.max(1, Math.floor(cellWidth / 5.2));
         const clipped = text.length > maxChars ? text.slice(0, maxChars - 1) + "…" : text;
-        doc.text(clipped, xx, y);
-        xx += colWidths[i];
+
+        doc.text(clipped, x, y);
+        x += cellWidth;
       });
-      y += 18;
+
+      y += 16;
     });
 
     const safeFrom = fromDate.replaceAll("-", "");
     const safeTo = toDate.replaceAll("-", "");
-    const filename = giornoSelezionato ? `allenamenti_${safeFrom}.pdf` : `allenamenti_${safeFrom}_${safeTo}.pdf`;
+    const filename = giornoSelezionato
+      ? `allenamenti_${safeFrom}.pdf`
+      : `allenamenti_${safeFrom}_${safeTo}.pdf`;
+
     doc.save(filename);
   } catch (e) {
     console.error(e);
