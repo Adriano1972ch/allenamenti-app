@@ -16,6 +16,7 @@ const emailInput = document.getElementById("email");
 const passwordInput = document.getElementById("password");
 
 const form = document.getElementById("form");
+const submitBtn = form?.querySelector('button[type="submit"]');
 const tipo = document.getElementById("tipo");
 const dataInput = document.getElementById("data");
 const ora_inizio = document.getElementById("ora_inizio");
@@ -72,14 +73,16 @@ let isAdmin = false;
 
 let selectedUserId = "__all__"; // "__all__" = no filter
 
-// Map ids for color legend (Sophie/Vivienne)
-let userIdByName = { sophie: null, vivienne: null };
-
 // ✅ editing mode (modifica)
 let editingId = null;
 
 // ================= UTILS =================
-function isoDate(d) { return d.toISOString().split("T")[0]; }
+function isoDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 function formatDate(dateStr) {
   const [y, m, d] = dateStr.split("-");
   return `${d}.${m}.${y}`;
@@ -113,24 +116,6 @@ async function getIsAdmin() {
   return data?.role === "admin";
 }
 
-
-async function ensureProfile(user) {
-  if (!user?.id) return;
-  // crea/aggiorna il profilo dell'utente loggato (serve per la FK allenamenti.user_id -> profiles.id)
-  const full_name = user.user_metadata?.full_name || user.user_metadata?.name || null;
-  const email = user.email || null;
-
-  const { error } = await supabaseClient
-    .from("profiles")
-    .upsert([{ id: user.id, email, full_name }], { onConflict: "id" });
-
-  if (error) {
-    // Non blocco l'app, ma loggo perché può causare l'errore FK quando inserisci allenamenti
-    console.warn("ensureProfile warning:", error);
-  }
-}
-
-
 async function enrichWithProfiles(rows) {
   const ids = Array.from(new Set((rows || []).map(r => r.user_id).filter(Boolean)));
   if (ids.length === 0) return rows || [];
@@ -145,6 +130,7 @@ async function enrichWithProfiles(rows) {
 
 function clearEditingMode() {
   editingId = null;
+  if (submitBtn) submitBtn.textContent = "➕ Aggiungi";
 }
 
 // ================= AUTH UI =================
@@ -201,14 +187,6 @@ async function populateUserFilter() {
     return;
   }
 
-  // Build id map for calendar colors
-  userIdByName = { sophie: null, vivienne: null };
-  (data || []).forEach(p => {
-    const n = String(p.full_name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
-    if (n === 'sophie') userIdByName.sophie = p.id;
-    if (n === 'vivienne') userIdByName.vivienne = p.id;
-  });
-
   const opts = [];
   opts.push(`<option value="__all__">Tutti</option>`);
   if (currentUser?.id) opts.push(`<option value="${currentUser.id}">Admin</option>`);
@@ -233,9 +211,7 @@ async function checkSession() {
   currentUser = session.user;
   isAdmin = await getIsAdmin();
 
-  
-  await ensureProfile(session.user);
-authDiv.style.display = "none";
+  authDiv.style.display = "none";
   appDiv.style.display = "block";
 
   const display = currentUser.user_metadata?.full_name || currentUser.email || "";
@@ -247,7 +223,7 @@ authDiv.style.display = "none";
   }
 
   await caricaAllenamentiMese();
-  showView("view-dashboard");
+  showView("view-list");
 }
 checkSession();
 
@@ -268,17 +244,14 @@ form.onsubmit = async (e) => {
     return;
   }
 
-
-  // Se sei admin e stai filtrando su "Tutti", per inserire serve scegliere un utente specifico
+  // Se sei admin e vuoi inserire per altri, devi scegliere un utente specifico
   if (isAdmin && selectedUserId === "__all__") {
-    alert("Seleziona un utente dal filtro (non 'Tutti') prima di inserire un nuovo allenamento.");
+    alert("Se sei admin, seleziona prima un utente specifico (non 'Tutti') dal menu Visualizza.");
     return;
   }
 
-    const targetUserId = (isAdmin && selectedUserId && selectedUserId !== "__all__") ? selectedUserId : session.user.id;
-
   const payload = {
-    user_id: targetUserId, // ✅ FK + supporto admin (inserisci per utente selezionato)
+    user_id: (isAdmin && selectedUserId && selectedUserId !== "__all__") ? selectedUserId : session.user.id,
     tipo: tipo.value,
     data: dataInput.value,
     ora_inizio: ora_inizio.value,
@@ -365,7 +338,7 @@ function renderCalendar() {
     const dayRows = allenamentiMese.filter(a => a.data === dateStr);
     const hasWorkout = dayRows.length > 0;
 
-    // Color coding by "Inserito da" (nome profilo) + fallback su persone/note
+    // Color coding: usa prima il nome profilo (_full_name = "Inserito da"), con fallback su persone/note
     const namesText = dayRows
       .map(r => `${r._full_name || ""} ${r.persone || ""} ${r.note || ""}`)
       .join(" ")
@@ -373,9 +346,8 @@ function renderCalendar() {
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "");
 
-    // Prefer user_id matching (robust even if profiles are not readable), fallback to name text
-    const hasSophie = (userIdByName.sophie && dayRows.some(r => r.user_id === userIdByName.sophie)) || /sophie/.test(namesText);
-    const hasVivienne = (userIdByName.vivienne && dayRows.some(r => r.user_id === userIdByName.vivienne)) || /vivienne/.test(namesText);
+    const hasSophie = /\bsophie\b/.test(namesText);
+    const hasVivienne = /\bvivienne\b/.test(namesText);
 
     let colorClass = "";
     if (hasSophie && hasVivienne) colorClass = "workout-both";
@@ -491,10 +463,11 @@ window.modificaAllenamento = async function (id) {
   note.value = data.note || "";
 
   // porta l'utente dove vede il form (di solito dashboard)
-  showView("view-dashboard");
+  showView("view-list");
   form.scrollIntoView?.({ behavior: "smooth", block: "start" });
 
-  alert("Modalità modifica: ora premi SALVA per aggiornare ✅");
+  if (submitBtn) submitBtn.textContent = "💾 Salva";
+  alert("Modalità modifica: ora modifica i campi e poi premi SALVA ✅");
 };
 
 // ================= DASHBOARD =================
@@ -691,10 +664,8 @@ async function doExportPdf() {
     if (!rows || rows.length === 0) return alert("Nessun dato da esportare");
 
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+    const doc = new jsPDF({ unit: "pt", format: "a4" });
 
-    const pageW = doc.internal.pageSize.getWidth();
-    const pageH = doc.internal.pageSize.getHeight();
     const title = giornoSelezionato
       ? `Report Allenamenti (${fromDate})`
       : `Report Allenamenti (${monthLabel(currentMonth)})`;
@@ -702,36 +673,27 @@ async function doExportPdf() {
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(16);
-    doc.text(title, pageW / 2, 50, { align: "center" });
+    doc.text(title, 40, 50);
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(11);
-    doc.text(subtitle, pageW / 2, 70, { align: "center" });
+    doc.text(subtitle, 40, 70);
 
     const headers = ["Data", "Ora", "Tipo", "Durata", "Partecipanti", "Trainer", ...(isAdmin ? ["Inserito da"] : [])];
-
-    // Margini / dimensioni pagina (dinamiche per portrait/landscape)
-    const marginX = 40;
-    const tableRight = pageW - marginX;
-    const pageBottom = pageH - 55;
-
-    // Colonne ottimizzate per A4 landscape
-    const colWidths = isAdmin
-      ? [65, 50, 200, 60, 80, 150, 100]
-      : [65, 50, 240, 60, 80, 170];
-
-    function drawTableHeader(yPos) {
-      let xPos = marginX;
-      doc.setFont("helvetica", "bold");
-      headers.forEach((h, i) => { doc.text(h, xPos, yPos); xPos += colWidths[i]; });
-      doc.setDrawColor(200);
-      doc.line(marginX, yPos + 6, tableRight, yPos + 6);
-      doc.setFont("helvetica", "normal");
-      return yPos + 24;
-    }
+    const colWidths = isAdmin ? [70, 50, 140, 60, 80, 110, 90] : [70, 50, 160, 60, 80, 120];
 
     let y = 95;
-    y = drawTableHeader(y);
+    let x = 40;
+
+    doc.setFont("helvetica", "bold");
+    headers.forEach((h, i) => { doc.text(h, x, y); x += colWidths[i]; });
+    doc.setDrawColor(200);
+    doc.line(40, y + 6, 555, y + 6);
+
+    y += 24;
+    doc.setFont("helvetica", "normal");
+
+    const pageBottom = 800;
 
     rows.forEach((a) => {
       const row = [
@@ -744,22 +706,19 @@ async function doExportPdf() {
         ...(isAdmin ? [a._full_name || "-"] : [])
       ];
 
-      if (y > pageBottom) {
-        doc.addPage();
-        y = 60;
-        y = drawTableHeader(y);
-      }
+      if (y > pageBottom) { doc.addPage(); y = 60; }
 
-      let xx = marginX;
+      let xx = 40;
       row.forEach((val, i) => {
         const text = String(val ?? "");
-        const approxChars = Math.max(3, Math.floor(((colWidths[i] || 80) - 6) / 5.2));
-        const clipped = text.length > approxChars ? text.slice(0, approxChars - 1) + "…" : text;
+        const maxChars = Math.floor((colWidths[i] || 80) / 6);
+        const clipped = text.length > maxChars ? text.slice(0, maxChars - 1) + "…" : text;
         doc.text(clipped, xx, y);
         xx += colWidths[i];
       });
       y += 18;
     });
+
     const safeFrom = fromDate.replaceAll("-", "");
     const safeTo = toDate.replaceAll("-", "");
     const filename = giornoSelezionato ? `allenamenti_${safeFrom}.pdf` : `allenamenti_${safeFrom}_${safeTo}.pdf`;
