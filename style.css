@@ -291,3 +291,34 @@ h3{ margin: 14px 0 10px; }
 .dot-sophie{ background:#2563eb; }
 .dot-vivienne{ background:#16a34a; }
 .dot-both{ background: linear-gradient(135deg, #2563eb 0 50%, #16a34a 50% 100%); }
+/* ===== Export options: fix radio + inputs (restore UX) ===== */
+#exportOptions label{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+#exportOptions input[type="radio"]{
+  width: auto;
+  margin: 0;
+  padding: 0;
+}
+
+#customDates{
+  display:flex;
+  gap: 10px;
+  align-items:center;
+  flex-wrap: wrap;
+}
+
+#customDates input[type="date"]{
+  width: auto;
+  min-width: 160px;
+  margin: 0;
+}
+
+#monthPicker input[type="month"]{
+  width: auto;
+  margin: 0;
+}
