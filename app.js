@@ -176,6 +176,15 @@ async function uploadAvatarToStorage(file){
   return data?.publicUrl || null;
 }
 
+
+function withCacheBust(url){
+  if (!url) return url;
+  const ts = localStorage.getItem("profile_avatar_ts") || String(Date.now());
+  // preserve existing query params
+  const sep = url.includes("?") ? "&" : "?";
+  return url + sep + "v=" + encodeURIComponent(ts);
+}
+
 async function loadAvatarIntoUI(){
   const el = document.getElementById("profileAvatar");
   if (!el) return;
@@ -183,7 +192,7 @@ async function loadAvatarIntoUI(){
   if (!url) url = localStorage.getItem("profile_avatar") || null; // fallback
   if (url) {
     el.textContent = "";
-    el.style.backgroundImage = "url('" + url + "')";
+    el.style.backgroundImage = "url('" + withCacheBust(url) + "')";
     el.classList.add("has-photo");
     el.classList.remove("no-photo");
   } else {
@@ -228,10 +237,13 @@ function bindAvatarUpload(){
       if (publicUrl) {
         await ensureProfileRow();
         await saveAvatarUrl(publicUrl);
+        localStorage.setItem("profile_avatar_ts", String(Date.now()));
       }
+      // reload from DB (with cache-bust)
+      await loadAvatarIntoUI();
     } catch (e) {
       console.warn("Avatar upload error:", e);
-      alert("Upload avatar fallito. Verifica bucket \"avatars\" e policy Storage (403/404). Dettagli in console.");
+      alert("Upload avatar fallito: " + (e?.message || JSON.stringify(e)));
     } finally {
       input.value = "";
     }
