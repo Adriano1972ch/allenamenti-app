@@ -251,6 +251,7 @@ function showView(id) {
     el.style.display = (v === id) ? "block" : "none";
   });
   navButtons.forEach(btn => btn.classList.toggle("active", btn.dataset.target === id));
+  if (id === "view-profile") { renderProfile(); }
   if (id === "view-list" && giornoSelezionato) caricaAllenamenti(giornoSelezionato);
 }
 
