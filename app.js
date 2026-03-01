@@ -43,7 +43,6 @@ const exportRangeRadios = Array.from(document.querySelectorAll('input[name="expo
 
 let lastExportIntent = null; // "excel" | "pdf"
 
-initAccent();
 
 // Views & nav
 const viewIds = ["view-dashboard", "view-calendar", "view-list", "view-profile"];
@@ -52,6 +51,9 @@ const navButtons = Array.from(document.querySelectorAll(".nav-item"));
 
 // ================= PROFILE UI (colors + avatar) =================
 const PROFILE_COLORS = ["#1d4ed8", "#2563eb", "#0ea5e9", "#06b6d4", "#14b8a6", "#16a34a", "#22c55e", "#84cc16", "#f59e0b", "#f97316", "#ef4444", "#e11d48", "#db2777", "#a855f7", "#7c3aed", "#6366f1", "#334155", "#475569", "#0f172a", "#9ca3af"];
+
+// Initialize accent color early
+initAccent();
 
 function initAccent(){
   const saved = localStorage.getItem("calendar_color") || PROFILE_COLORS[0];
