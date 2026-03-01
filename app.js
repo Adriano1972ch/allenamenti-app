@@ -5,6 +5,16 @@ const SUPABASE_URL = "https://sebcxlpyqehsbgyalzmz.supabase.co";
 const SUPABASE_KEY = "sb_publishable_8BwK3_2OGff5uaDRrdCfHQ_rNhUWCzE";
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+
+// ================= DEBUG (temporary) =================
+// Se qualcosa blocca la pagina (specialmente su smartphone), mostriamo l'errore.
+window.addEventListener("error", (e) => {
+  console.error("JS error:", e?.error || e?.message || e);
+});
+window.addEventListener("unhandledrejection", (e) => {
+  console.error("Unhandled promise:", e?.reason || e);
+});
+
 // ================= DOM =================
 const authDiv = document.getElementById("auth");
 const appDiv = document.getElementById("app");
@@ -328,12 +338,32 @@ function clearEditingMode() {
 
 // ================= AUTH UI =================
 document.getElementById("loginBtn").onclick = async () => {
-  const { error } = await supabaseClient.auth.signInWithPassword({
-    email: emailInput.value,
-    password: passwordInput.value
-  });
-  if (error) alert(error.message);
-  else await checkSession();
+  const btn = document.getElementById("loginBtn");
+  try {
+    if (!window.supabase || !supabaseClient) {
+      alert("Supabase non caricato. Controlla connessione / cache.");
+      return;
+    }
+    btn.disabled = true;
+    const old = btn.textContent;
+    btn.textContent = "Accesso…";
+    const { data, error } = await supabaseClient.auth.signInWithPassword({
+      email: (emailInput.value || "").trim(),
+      password: passwordInput.value || ""
+    });
+    if (error) {
+      console.error("login error:", error);
+      alert("Login fallito: " + (error.message || JSON.stringify(error)));
+      return;
+    }
+    await checkSession();
+  } catch (e) {
+    console.error("login exception:", e);
+    alert("Errore login: " + (e?.message || JSON.stringify(e)));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Login";
+  }
 };
 
 document.getElementById("registerBtn").onclick = async () => {
