@@ -444,7 +444,10 @@ async function checkSession() {
   currentUser = session.user;
 
 
-      try{ await loadAvatarIntoUI(); }catch(e){ console.warn(e); }
+      
+  // aggiorna colori in base all\'utente loggato
+  initTrainerColors();
+try{ await loadAvatarIntoUI(); }catch(e){ console.warn(e); }
 isAdmin = await getIsAdmin();
 
   authDiv.style.display = "none";
