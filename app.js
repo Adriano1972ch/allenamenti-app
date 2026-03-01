@@ -44,8 +44,250 @@ const exportRangeRadios = Array.from(document.querySelectorAll('input[name="expo
 let lastExportIntent = null; // "excel" | "pdf"
 
 // Views & nav
-const viewIds = ["view-dashboard", "view-calendar", "view-list"];
+const viewIds = ["view-dashboard", "view-calendar", "view-list", "view-profile"];
 const navButtons = Array.from(document.querySelectorAll(".nav-item"));
+
+
+// ================= UI PREFERENCES (local only) =================
+function applyTheme(choice){
+  const html = document.documentElement;
+  if (choice === "system") {
+    html.removeAttribute("data-theme");
+    localStorage.setItem("theme_choice", "system");
+    return;
+  }
+  html.setAttribute("data-theme", choice);
+  localStorage.setItem("theme_choice", choice);
+}
+
+function initTheme(){
+  const saved = localStorage.getItem("theme_choice") || "light";
+  if (saved === "system") {
+    document.documentElement.removeAttribute("data-theme");
+  } else {
+    document.documentElement.setAttribute("data-theme", saved);
+  }
+
+
+// ================= PROFILE COLORS & AVATAR (local only) =================
+const PROFILE_COLORS = ["#1d4ed8", "#2563eb", "#0ea5e9", "#06b6d4", "#14b8a6", "#16a34a", "#22c55e", "#84cc16", "#f59e0b", "#f97316", "#ef4444", "#e11d48", "#db2777", "#a855f7", "#7c3aed", "#6366f1", "#334155", "#475569", "#0f172a", "#9ca3af"];
+
+function setAccent(color){
+  document.documentElement.style.setProperty("--accent", color);
+  localStorage.setItem("calendar_color", color);
+}
+
+function initAccent(){
+  const saved = localStorage.getItem("calendar_color") || PROFILE_COLORS[0];
+  document.documentElement.style.setProperty("--accent", saved);
+}
+
+function mountColorPalette(){
+  const wrap = document.getElementById("colorPalette");
+  if (!wrap) return;
+  const saved = localStorage.getItem("calendar_color") || PROFILE_COLORS[0];
+  wrap.innerHTML = "";
+  PROFILE_COLORS.forEach((col) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "dotpick";
+    btn.dataset.color = col;
+    btn.style.setProperty("--c", col);
+    btn.setAttribute("aria-label", "Colore " + col);
+    if (col === saved) btn.classList.add("active");
+    btn.onclick = () => {
+      setAccent(col);
+      wrap.querySelectorAll(".dotpick").forEach(b => b.classList.toggle("active", b.dataset.color === col));
+    };
+    wrap.appendChild(btn);
+  });
+}
+
+async function loadAvatar(){
+  const el = document.getElementById("profileAvatar");
+  if (!el) return;
+
+  // 1) DB (cross-device)
+  let url = await fetchAvatarUrl();
+
+  // 2) fallback (older local value)
+  if (!url) url = localStorage.getItem("profile_avatar");
+
+  if (url) {
+    el.textContent = "";
+    el.style.backgroundImage = "url('" + url + "')";
+    el.classList.add("has-photo");
+    el.classList.remove("no-photo");
+  } else {
+    el.style.backgroundImage = "none";
+    el.classList.remove("has-photo");
+    el.classList.add("no-photo");
+    el.textContent = "👤";
+  }
+}
+
+function bindAvatarUpload(){
+  const btn = document.getElementById("changeAvatarBtn");
+  const input = document.getElementById("avatarInput");
+  const avatar = document.getElementById("profileAvatar");
+  if (!btn || !input || !avatar) return;
+
+  btn.onclick = () => input.click();
+  avatar.onclick = () => input.click();
+
+  input.onchange = () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      alert("Seleziona un file immagine.");
+      input.value = "";
+      return;
+    }
+    // Limit ~1.5MB to avoid huge localStorage payload
+    if (file.size > 1500000) {
+      alert("Immagine troppo grande. Scegli una foto più leggera (max ~1.5MB).");
+      input.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = String(reader.result || "");
+      /* local preview */
+      const previewUrl = dataUrl;
+      const el = document.getElementById("profileAvatar");
+      if (el){ el.textContent=""; el.style.backgroundImage = "url('" + previewUrl + "')"; el.classList.add("has-photo"); el.classList.remove("no-photo"); }
+      // upload to Supabase (public)
+      try {
+        const publicUrl = await uploadAvatarToStorage(file);
+        if (publicUrl) {
+          await ensureProfileRow();
+          await saveAvatarUrl(publicUrl);
+        }
+      } catch(err){
+        console.warn("Avatar upload error:", err);
+        alert("Errore caricamento foto. Riprova.");
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+}
+
+// ================= PROFILES (cross-device avatar) =================
+async function ensureProfileRow(){
+  if (!currentUser) return;
+  // Create row if missing
+  const { data: existing, error: e1 } = await supabaseClient
+    .from("profiles")
+    .select("id")
+    .eq("id", currentUser.id)
+    .maybeSingle();
+
+  if (e1) {
+    console.warn("profiles check error:", e1);
+    return;
+  }
+  if (!existing) {
+    const payload = {
+      id: currentUser.id,
+      full_name: currentUser.user_metadata?.full_name || null,
+      avatar_url: null
+    };
+    const { error: e2 } = await supabaseClient.from("profiles").insert(payload);
+    if (e2) console.warn("profiles insert error:", e2);
+  }
+}
+
+async function fetchAvatarUrl(){
+  if (!currentUser) return null;
+  const { data, error } = await supabaseClient
+    .from("profiles")
+    .select("avatar_url")
+    .eq("id", currentUser.id)
+    .maybeSingle();
+  if (error) {
+    console.warn("profiles avatar read error:", error);
+    return null;
+  }
+  return data?.avatar_url || null;
+}
+
+async function saveAvatarUrl(url){
+  if (!currentUser) return;
+  const { error } = await supabaseClient
+    .from("profiles")
+    .update({ avatar_url: url })
+    .eq("id", currentUser.id);
+  if (error) console.warn("profiles avatar update error:", error);
+}
+
+async function uploadAvatarToStorage(file){
+  if (!currentUser) throw new Error("Not logged in");
+  const bucket = "avatars";
+  // Keep a stable filename so user can replace it easily
+  const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+  const path = `${currentUser.id}/avatar.${ext}`;
+
+  const { error: upErr } = await supabaseClient
+    .storage
+    .from(bucket)
+    .upload(path, file, { upsert: true, cacheControl: "3600" });
+
+  if (upErr) throw upErr;
+
+  const { data } = supabaseClient.storage.from(bucket).getPublicUrl(path);
+  return data?.publicUrl || null;
+}
+}
+
+// ================= PROFILE (front-end only) =================
+async function renderProfile(){
+  try {
+    const nameEl = document.getElementById("profileName");
+    const emailEl = document.getElementById("profileEmail");
+    const roleEl = document.getElementById("profileRole");
+
+    nameEl.textContent = currentUser?.user_metadata?.full_name || currentUser?.email || "Utente";
+    emailEl.textContent = currentUser?.email || "—";
+
+    // Role (from DB if available; fallback)
+    getIsAdmin().then(isAdmin => {
+      roleEl.textContent = isAdmin ? "Admin" : "Utente";
+      const adminPanel = document.getElementById("adminPanel");
+      if (adminPanel) adminPanel.style.display = isAdmin ? "block" : "none";
+    }).catch(()=>{ roleEl.textContent = "Utente"; });
+
+    // Copy dashboard stats into profile stats (best-effort)
+    const s = document.getElementById("dashSessions")?.textContent || "—";
+    const h = document.getElementById("dashHours")?.textContent || "—";
+    const a = document.getElementById("dashAvgParticipants")?.textContent || "—";
+    const ps = document.getElementById("pStatSessions");
+    const ph = document.getElementById("pStatHours");
+    const pa = document.getElementById("pStatAvg");
+    if (ps) ps.textContent = s;
+    if (ph) ph.textContent = h;
+    if (pa) pa.textContent = a;
+
+    // Theme segmented UI
+    const current = localStorage.getItem("theme_choice") || "light";
+    document.querySelectorAll('[data-theme-choice]').forEach(btn=>{
+      btn.classList.toggle("active", btn.dataset.themeChoice === current);
+      btn.onclick = () => {
+        const choice = btn.dataset.themeChoice;
+        applyTheme(choice);
+        document.querySelectorAll('[data-theme-choice]').forEach(b=>b.classList.toggle("active", b.dataset.themeChoice === choice));
+      };
+    });
+    // Color palette (local only)
+    mountColorPalette();
+
+    // Secondary logout button
+    const lb2 = document.getElementById("logoutBtn2");
+    if (lb2) lb2.onclick = () => document.getElementById("logoutBtn")?.click();
+
+  } catch(e){
+    console.warn("renderProfile error", e);
+  }
+}
 const dashGoCalendarBtn = document.getElementById("dashGoCalendarBtn");
 const dashGoListBtn = document.getElementById("dashGoListBtn");
 
@@ -103,6 +345,7 @@ function showView(id) {
   });
   navButtons.forEach(btn => btn.classList.toggle("active", btn.dataset.target === id));
   if (id === "view-list" && giornoSelezionato) caricaAllenamenti(giornoSelezionato);
+  if (id === "view-profile") renderProfile();
 }
 
 async function getIsAdmin() {
