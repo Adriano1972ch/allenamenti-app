@@ -91,7 +91,7 @@ function initTrainerColors(){
   document.documentElement.style.setProperty("--accent", myColor);
 }
 
-function setMyTrainerColor(col){
+function setMyTrainerColor(col, opts = {}){
   const slug = getTrainerSlug();
   if (slug === "vivienne") {
     localStorage.setItem("vivienne_color", col);
@@ -171,6 +171,46 @@ async function saveAvatarUrl(url){
   if (error) console.warn("avatar_url update error", error);
 }
 
+
+async function fetchTrainerColor(){
+  if (!currentUser) return null;
+  const { data, error } = await supabaseClient
+    .from("profiles")
+    .select("trainer_color")
+    .eq("id", currentUser.id)
+    .maybeSingle();
+  if (error) { console.warn("trainer_color read error", error); return null; }
+  return data?.trainer_color || null;
+}
+
+async function saveTrainerColor(col){
+  if (!currentUser) return;
+  const { error } = await supabaseClient
+    .from("profiles")
+    .update({ trainer_color: col })
+    .eq("id", currentUser.id);
+  if (error) console.warn("trainer_color update error", error);
+}
+
+async function syncTrainerColorFromProfile(){
+  if (!currentUser) return;
+
+  const slug = getTrainerSlug();
+  const local = (slug === "vivienne")
+    ? (localStorage.getItem("vivienne_color") || DEFAULT_VIVIENNE)
+    : (localStorage.getItem("sophie_color") || DEFAULT_SOPHIE);
+
+  const remote = await fetchTrainerColor();
+
+  if (remote) {
+    // Applica il colore remoto senza riscriverlo subito (evita update inutile)
+    setMyTrainerColor(remote, { persistRemote: false });
+  } else if (local) {
+    // Prima volta: carica su Supabase il valore locale
+    await saveTrainerColor(local);
+  }
+}
+
 async function uploadAvatarToStorage(file){
   const bucket = "avatars";
   const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
@@ -215,7 +255,7 @@ function avatarKey(suffix){
 }
 
 
-async function loadAvatarIntoUI(){
+async async function loadAvatarIntoUI(){
   const el = document.getElementById("profileAvatar");
   if (!el) return;
   let url = await fetchAvatarUrl();
@@ -449,10 +489,14 @@ async function checkSession() {
 
   currentUser = session.user;
 
+  try{ await ensureProfileRow(); }catch(e){ console.warn(e); }
+
 
       
   // aggiorna colori in base all\'utente loggato
   initTrainerColors();
+  try{ await syncTrainerColorFromProfile(); }catch(e){ console.warn(e); }
+  try{ mountColorPalette(); }catch(e){ console.warn(e); }
 try{ await loadAvatarIntoUI(); }catch(e){ console.warn(e); }
 isAdmin = await getIsAdmin();
 
