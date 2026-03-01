@@ -43,39 +43,15 @@ const exportRangeRadios = Array.from(document.querySelectorAll('input[name="expo
 
 let lastExportIntent = null; // "excel" | "pdf"
 
+initAccent();
+
 // Views & nav
 const viewIds = ["view-dashboard", "view-calendar", "view-list", "view-profile"];
 const navButtons = Array.from(document.querySelectorAll(".nav-item"));
 
 
-// ================= UI PREFERENCES (local only) =================
-function applyTheme(choice){
-  const html = document.documentElement;
-  if (choice === "system") {
-    html.removeAttribute("data-theme");
-    localStorage.setItem("theme_choice", "system");
-    return;
-  }
-  html.setAttribute("data-theme", choice);
-  localStorage.setItem("theme_choice", choice);
-}
-
-function initTheme(){
-  const saved = localStorage.getItem("theme_choice") || "light";
-  if (saved === "system") {
-    document.documentElement.removeAttribute("data-theme");
-  } else {
-    document.documentElement.setAttribute("data-theme", saved);
-  }
-
-
-// ================= PROFILE COLORS & AVATAR (local only) =================
+// ================= PROFILE UI (colors + avatar) =================
 const PROFILE_COLORS = ["#1d4ed8", "#2563eb", "#0ea5e9", "#06b6d4", "#14b8a6", "#16a34a", "#22c55e", "#84cc16", "#f59e0b", "#f97316", "#ef4444", "#e11d48", "#db2777", "#a855f7", "#7c3aed", "#6366f1", "#334155", "#475569", "#0f172a", "#9ca3af"];
-
-function setAccent(color){
-  document.documentElement.style.setProperty("--accent", color);
-  localStorage.setItem("calendar_color", color);
-}
 
 function initAccent(){
   const saved = localStorage.getItem("calendar_color") || PROFILE_COLORS[0];
@@ -96,23 +72,71 @@ function mountColorPalette(){
     btn.setAttribute("aria-label", "Colore " + col);
     if (col === saved) btn.classList.add("active");
     btn.onclick = () => {
-      setAccent(col);
+      localStorage.setItem("calendar_color", col);
+      document.documentElement.style.setProperty("--accent", col);
       wrap.querySelectorAll(".dotpick").forEach(b => b.classList.toggle("active", b.dataset.color === col));
     };
     wrap.appendChild(btn);
   });
 }
 
-async function loadAvatar(){
+async function ensureProfileRow(){
+  if (!currentUser) return;
+  const { data: existing, error } = await supabaseClient
+    .from("profiles")
+    .select("id")
+    .eq("id", currentUser.id)
+    .maybeSingle();
+  if (error) { console.warn("profiles read error", error); return; }
+  if (!existing) {
+    const payload = {
+      id: currentUser.id,
+      full_name: currentUser.user_metadata?.full_name || null,
+      avatar_url: null
+    };
+    const { error: insErr } = await supabaseClient.from("profiles").insert(payload);
+    if (insErr) console.warn("profiles insert error", insErr);
+  }
+}
+
+async function fetchAvatarUrl(){
+  if (!currentUser) return null;
+  const { data, error } = await supabaseClient
+    .from("profiles")
+    .select("avatar_url")
+    .eq("id", currentUser.id)
+    .maybeSingle();
+  if (error) { console.warn("avatar_url read error", error); return null; }
+  return data?.avatar_url || null;
+}
+
+async function saveAvatarUrl(url){
+  if (!currentUser) return;
+  const { error } = await supabaseClient
+    .from("profiles")
+    .update({ avatar_url: url })
+    .eq("id", currentUser.id);
+  if (error) console.warn("avatar_url update error", error);
+}
+
+async function uploadAvatarToStorage(file){
+  const bucket = "avatars";
+  const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+  const path = `${currentUser.id}/avatar.${ext}`;
+  const { error } = await supabaseClient.storage.from(bucket).upload(path, file, {
+    upsert: true,
+    cacheControl: "3600"
+  });
+  if (error) throw error;
+  const { data } = supabaseClient.storage.from(bucket).getPublicUrl(path);
+  return data?.publicUrl || null;
+}
+
+async function loadAvatarIntoUI(){
   const el = document.getElementById("profileAvatar");
   if (!el) return;
-
-  // 1) DB (cross-device)
   let url = await fetchAvatarUrl();
-
-  // 2) fallback (older local value)
-  if (!url) url = localStorage.getItem("profile_avatar");
-
+  if (!url) url = localStorage.getItem("profile_avatar") || null; // fallback
   if (url) {
     el.textContent = "";
     el.style.backgroundImage = "url('" + url + "')";
@@ -132,161 +156,42 @@ function bindAvatarUpload(){
   const avatar = document.getElementById("profileAvatar");
   if (!btn || !input || !avatar) return;
 
-  btn.onclick = () => input.click();
-  avatar.onclick = () => input.click();
+  const open = () => input.click();
+  btn.onclick = open;
+  avatar.onclick = open;
 
-  input.onchange = () => {
+  input.onchange = async () => {
     const file = input.files && input.files[0];
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      alert("Seleziona un file immagine.");
-      input.value = "";
-      return;
-    }
-    // Limit ~1.5MB to avoid huge localStorage payload
-    if (file.size > 1500000) {
-      alert("Immagine troppo grande. Scegli una foto più leggera (max ~1.5MB).");
-      input.value = "";
-      return;
-    }
+    if (!file.type.startsWith("image/")) { alert("Seleziona un file immagine."); return; }
+    if (file.size > 1500000) { alert("Immagine troppo grande (max ~1.5MB)."); return; }
+
+    // local preview
     const reader = new FileReader();
-    reader.onload = async () => {
+    reader.onload = () => {
       const dataUrl = String(reader.result || "");
-      /* local preview */
-      const previewUrl = dataUrl;
-      const el = document.getElementById("profileAvatar");
-      if (el){ el.textContent=""; el.style.backgroundImage = "url('" + previewUrl + "')"; el.classList.add("has-photo"); el.classList.remove("no-photo"); }
-      // upload to Supabase (public)
-      try {
-        const publicUrl = await uploadAvatarToStorage(file);
-        if (publicUrl) {
-          await ensureProfileRow();
-          await saveAvatarUrl(publicUrl);
-        }
-      } catch(err){
-        console.warn("Avatar upload error:", err);
-        alert("Errore caricamento foto. Riprova.");
-      }
+      localStorage.setItem("profile_avatar", dataUrl);
+      avatar.textContent = "";
+      avatar.style.backgroundImage = "url('" + dataUrl + "')";
+      avatar.classList.add("has-photo");
+      avatar.classList.remove("no-photo");
     };
     reader.readAsDataURL(file);
+
+    // upload online (cross-device)
+    try {
+      const publicUrl = await uploadAvatarToStorage(file);
+      if (publicUrl) {
+        await ensureProfileRow();
+        await saveAvatarUrl(publicUrl);
+      }
+    } catch (e) {
+      console.warn("Avatar upload error:", e);
+      alert("Errore caricamento foto. Verifica bucket/policy su Supabase.");
+    } finally {
+      input.value = "";
+    }
   };
-}
-
-// ================= PROFILES (cross-device avatar) =================
-async function ensureProfileRow(){
-  if (!currentUser) return;
-  // Create row if missing
-  const { data: existing, error: e1 } = await supabaseClient
-    .from("profiles")
-    .select("id")
-    .eq("id", currentUser.id)
-    .maybeSingle();
-
-  if (e1) {
-    console.warn("profiles check error:", e1);
-    return;
-  }
-  if (!existing) {
-    const payload = {
-      id: currentUser.id,
-      full_name: currentUser.user_metadata?.full_name || null,
-      avatar_url: null
-    };
-    const { error: e2 } = await supabaseClient.from("profiles").insert(payload);
-    if (e2) console.warn("profiles insert error:", e2);
-  }
-}
-
-async function fetchAvatarUrl(){
-  if (!currentUser) return null;
-  const { data, error } = await supabaseClient
-    .from("profiles")
-    .select("avatar_url")
-    .eq("id", currentUser.id)
-    .maybeSingle();
-  if (error) {
-    console.warn("profiles avatar read error:", error);
-    return null;
-  }
-  return data?.avatar_url || null;
-}
-
-async function saveAvatarUrl(url){
-  if (!currentUser) return;
-  const { error } = await supabaseClient
-    .from("profiles")
-    .update({ avatar_url: url })
-    .eq("id", currentUser.id);
-  if (error) console.warn("profiles avatar update error:", error);
-}
-
-async function uploadAvatarToStorage(file){
-  if (!currentUser) throw new Error("Not logged in");
-  const bucket = "avatars";
-  // Keep a stable filename so user can replace it easily
-  const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
-  const path = `${currentUser.id}/avatar.${ext}`;
-
-  const { error: upErr } = await supabaseClient
-    .storage
-    .from(bucket)
-    .upload(path, file, { upsert: true, cacheControl: "3600" });
-
-  if (upErr) throw upErr;
-
-  const { data } = supabaseClient.storage.from(bucket).getPublicUrl(path);
-  return data?.publicUrl || null;
-}
-}
-
-// ================= PROFILE (front-end only) =================
-async function renderProfile(){
-  try {
-    const nameEl = document.getElementById("profileName");
-    const emailEl = document.getElementById("profileEmail");
-    const roleEl = document.getElementById("profileRole");
-
-    nameEl.textContent = currentUser?.user_metadata?.full_name || currentUser?.email || "Utente";
-    emailEl.textContent = currentUser?.email || "—";
-
-    // Role (from DB if available; fallback)
-    getIsAdmin().then(isAdmin => {
-      roleEl.textContent = isAdmin ? "Admin" : "Utente";
-      const adminPanel = document.getElementById("adminPanel");
-      if (adminPanel) adminPanel.style.display = isAdmin ? "block" : "none";
-    }).catch(()=>{ roleEl.textContent = "Utente"; });
-
-    // Copy dashboard stats into profile stats (best-effort)
-    const s = document.getElementById("dashSessions")?.textContent || "—";
-    const h = document.getElementById("dashHours")?.textContent || "—";
-    const a = document.getElementById("dashAvgParticipants")?.textContent || "—";
-    const ps = document.getElementById("pStatSessions");
-    const ph = document.getElementById("pStatHours");
-    const pa = document.getElementById("pStatAvg");
-    if (ps) ps.textContent = s;
-    if (ph) ph.textContent = h;
-    if (pa) pa.textContent = a;
-
-    // Theme segmented UI
-    const current = localStorage.getItem("theme_choice") || "light";
-    document.querySelectorAll('[data-theme-choice]').forEach(btn=>{
-      btn.classList.toggle("active", btn.dataset.themeChoice === current);
-      btn.onclick = () => {
-        const choice = btn.dataset.themeChoice;
-        applyTheme(choice);
-        document.querySelectorAll('[data-theme-choice]').forEach(b=>b.classList.toggle("active", b.dataset.themeChoice === choice));
-      };
-    });
-    // Color palette (local only)
-    mountColorPalette();
-
-    // Secondary logout button
-    const lb2 = document.getElementById("logoutBtn2");
-    if (lb2) lb2.onclick = () => document.getElementById("logoutBtn")?.click();
-
-  } catch(e){
-    console.warn("renderProfile error", e);
-  }
 }
 const dashGoCalendarBtn = document.getElementById("dashGoCalendarBtn");
 const dashGoListBtn = document.getElementById("dashGoListBtn");
@@ -345,7 +250,6 @@ function showView(id) {
   });
   navButtons.forEach(btn => btn.classList.toggle("active", btn.dataset.target === id));
   if (id === "view-list" && giornoSelezionato) caricaAllenamenti(giornoSelezionato);
-  if (id === "view-profile") renderProfile();
 }
 
 async function getIsAdmin() {
@@ -640,42 +544,26 @@ async function caricaAllenamenti(data) {
     const who = (a._full_name || "-");
     const canEdit = isAdmin || (currentUser && a.user_id === currentUser.id);
 
-    const durataTxt = a.durata ? (a.durata + " min") : "-";
-    const partecipantiTxt = (a.numero_partecipanti ?? a.num_partecipanti ?? "") || "-";
-    const trainerTxt = a.persone || "-";
-    const noteTxt = a.note || "-";
-
     listaDiv.innerHTML += `
-      <div class="workout-card">
-        <div class="workout-head">
-          <div>
-            <div class="workout-title">${a.tipo || "-"}</div>
-            <div class="workout-sub">
-              <span class="pill">📅 <strong>${formatDate(a.data)}</strong></span>
-              <span class="pill">🕒 <strong>${a.ora_inizio || "-"}</strong></span>
-              <span class="pill">⏱ <strong>${durataTxt}</strong></span>
-            </div>
-          </div>
-        </div>
-
-        <div class="workout-grid">
-          <div class="kv"><span class="k">Partecipanti</span><span class="v">👥 ${partecipantiTxt}</span></div>
-          <div class="kv"><span class="k">Trainer / Con chi</span><span class="v">🤝 ${trainerTxt}</span></div>
-          ${isAdmin ? `<div class="kv"><span class="k">Inserito da</span><span class="v">👤 ${who}</span></div>` : ``}
-        </div>
-
-        <div class="workout-notes"><strong>📝 Note:</strong> ${noteTxt}</div>
+      <div class="table-row">
+        <div>📅 <strong>Data:</strong> ${formatDate(a.data)}</div>
+        <div>⏰ <strong>Ora:</strong> ${a.ora_inizio}</div>
+        <div>🏋️ <strong>Tipo:</strong> ${a.tipo}</div>
+        <div>🤝 <strong>Trainer:</strong> ${a.persone || "-"}</div>
+        <div>👥 <strong>Partecipanti:</strong> ${a.numero_partecipanti || "-"}</div>
+        <div>⏱ <strong>Durata:</strong> ${a.durata ? a.durata + " min" : "-"}</div>
+        ${isAdmin ? `<div>👤 <strong>Inserito da:</strong> ${who}</div>` : ""}
+        <div>📝 <strong>Note:</strong> ${a.note || "-"}</div>
 
         ${canEdit ? `
           <div class="actions">
             <button onclick="modificaAllenamento('${a.id}')">✏️ Modifica</button>
             <button onclick="eliminaAllenamento('${a.id}')" class="btn-secondary">🗑 Elimina</button>
           </div>
-        ` : ``}
+        ` : ""}
       </div>
     `;
   });
-
 }
 
 window.eliminaAllenamento = async function (id) {
@@ -922,104 +810,45 @@ async function doExportPdf() {
     const { rows, fromDate, toDate } = await fetchExportRows();
     if (!rows || rows.length === 0) return alert("Nessun dato da esportare");
 
-    // PDF in ORIZZONTALE (landscape)
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({
-      orientation: "landscape",
-      unit: "pt",
-      format: "a4"
-    });
+    const { jsPDF } = window.jspdf;
 
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
+const doc = new jsPDF({
+  orientation: "landscape",
+  unit: "pt",
+  format: "a4"
+});
 
-    const marginX = 40;
-    const marginTop = 50;
-    const marginBottom = 40;
+    const title = giornoSelezionato
+      ? `Report Allenamenti (${fromDate})`
+      : `Report Allenamenti (${monthLabel(currentMonth)})`;
+    const subtitle = `Periodo: ${fromDate} → ${toDate}`;
 
-    // Titolo/periodo coerenti con il range selezionato + formato europeo
-    const exportMode = giornoSelezionato ? "day" : getSelectedExportMode();
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text(title, 40, 50);
 
-    function parseISO(iso) {
-      const [yy, mm, dd] = String(iso).split("-").map(Number);
-      return new Date(yy, (mm || 1) - 1, dd || 1);
-    }
-    function monthLabelFromISO(iso) {
-      return parseISO(iso).toLocaleDateString(currentLang, { month: "long", year: "numeric" });
-    }
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.text(subtitle, 40, 70);
 
-    const title =
-      exportMode === "day"
-        ? `Report Allenamenti (${formatDate(fromDate)})`
-        : exportMode === "month"
-          ? `Report Allenamenti (${monthLabelFromISO(fromDate)})`
-          : `Report Allenamenti (${formatDate(fromDate)} – ${formatDate(toDate)})`;
+    const headers = ["Data", "Ora", "Tipo", "Durata", "Partecipanti", "Trainer", ...(isAdmin ? ["Inserito da"] : [])];
+    const colWidths = isAdmin ? [70, 50, 140, 60, 80, 110, 90] : [70, 50, 160, 60, 80, 120];
 
-    const subtitle =
-      fromDate === toDate
-        ? `Data: ${formatDate(fromDate)}`
-        : `Periodo: ${formatDate(fromDate)} → ${formatDate(toDate)}`;
+    let y = 95;
+    let x = 40;
 
-    const headers = [
-      "Data",
-      "Ora",
-      "Tipo",
-      "Durata",
-      "Partecipanti",
-      "Trainer",
-      ...(isAdmin ? ["Inserito da"] : [])
-    ];
+    doc.setFont("helvetica", "bold");
+    headers.forEach((h, i) => { doc.text(h, x, y); x += colWidths[i]; });
+    doc.setDrawColor(200);
+    doc.line(40, y + 6, 555, y + 6);
 
-    // Larghezze colonne calibrate per A4 landscape (unità: pt)
-    // Area utile: pageWidth - 2*marginX
-    const colWidths = isAdmin
-      ? [80, 55, 210, 65, 90, 120, 142]   // somma = 762
-      : [85, 55, 260, 70, 100, 192];      // somma = 762
+    y += 24;
+    doc.setFont("helvetica", "normal");
 
-    function drawHeader() {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(16);
-      doc.text(title, marginX, marginTop);
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(11);
-      doc.text(subtitle, marginX, marginTop + 20);
-    }
-
-    function drawTableHeader(y) {
-      let x = marginX;
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
-      headers.forEach((h, i) => {
-        doc.text(String(h), x, y);
-        x += colWidths[i];
-      });
-
-      doc.setDrawColor(200);
-      doc.line(marginX, y + 6, pageWidth - marginX, y + 6);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-    }
-
-    // Prima pagina
-    drawHeader();
-
-    let y = marginTop + 45;
-    drawTableHeader(y);
-
-    y += 22;
-    const pageBottom = pageHeight - marginBottom;
+    const pageBottom = 800;
 
     rows.forEach((a) => {
-      // Se serve nuova pagina
-      if (y > pageBottom) {
-        doc.addPage();
-        drawHeader();
-        y = marginTop + 45;
-        drawTableHeader(y);
-        y += 22;
-      }
-
       const row = [
         a.data ? formatDate(a.data) : "",
         a.ora_inizio || "",
@@ -1030,29 +859,22 @@ async function doExportPdf() {
         ...(isAdmin ? [a._full_name || "-"] : [])
       ];
 
-      let x = marginX;
+      if (y > pageBottom) { doc.addPage(); y = 60; }
 
+      let xx = 40;
       row.forEach((val, i) => {
-        const cellWidth = colWidths[i] || 80;
         const text = String(val ?? "");
-
-        // Stima semplice: ~5.2pt per carattere a font 10 (ok per clipping rapido)
-        const maxChars = Math.max(1, Math.floor(cellWidth / 5.2));
+        const maxChars = Math.floor((colWidths[i] || 80) / 6);
         const clipped = text.length > maxChars ? text.slice(0, maxChars - 1) + "…" : text;
-
-        doc.text(clipped, x, y);
-        x += cellWidth;
+        doc.text(clipped, xx, y);
+        xx += colWidths[i];
       });
-
-      y += 16;
+      y += 18;
     });
 
     const safeFrom = fromDate.replaceAll("-", "");
     const safeTo = toDate.replaceAll("-", "");
-    const filename = giornoSelezionato
-      ? `allenamenti_${safeFrom}.pdf`
-      : `allenamenti_${safeFrom}_${safeTo}.pdf`;
-
+    const filename = giornoSelezionato ? `allenamenti_${safeFrom}.pdf` : `allenamenti_${safeFrom}_${safeTo}.pdf`;
     doc.save(filename);
   } catch (e) {
     console.error(e);
@@ -1344,3 +1166,40 @@ window.alert = (msg) => {
 };
 
 document.addEventListener("DOMContentLoaded", applyTranslations);
+
+
+
+async function renderProfile(){
+  // Fill basic user info
+  const nameEl = document.getElementById("profileName");
+  const emailEl = document.getElementById("profileEmail");
+  const roleEl = document.getElementById("profileRole");
+  if (nameEl) nameEl.textContent = currentUser?.user_metadata?.full_name || currentUser?.email || "Utente";
+  if (emailEl) emailEl.textContent = currentUser?.email || "—";
+
+  try {
+    const isAdmin = await getIsAdmin();
+    if (roleEl) roleEl.textContent = isAdmin ? "Admin" : "Utente";
+    const adminPanel = document.getElementById("adminPanel");
+    if (adminPanel) adminPanel.style.display = isAdmin ? "block" : "none";
+  } catch(_) {
+    if (roleEl) roleEl.textContent = "Utente";
+  }
+
+  // Stats: mirror dashboard
+  const ps = document.getElementById("pStatSessions");
+  const ph = document.getElementById("pStatHours");
+  const pa = document.getElementById("pStatAvg");
+  if (ps) ps.textContent = document.getElementById("dashSessions")?.textContent || "—";
+  if (ph) ph.textContent = document.getElementById("dashHours")?.textContent || "—";
+  if (pa) pa.textContent = document.getElementById("dashAvgParticipants")?.textContent || "—";
+
+  mountColorPalette();
+  bindAvatarUpload();
+  await ensureProfileRow();
+  await loadAvatarIntoUI();
+
+  // secondary logout
+  const lb2 = document.getElementById("logoutBtn2");
+  if (lb2) lb2.onclick = () => document.getElementById("logoutBtn")?.click();
+}
