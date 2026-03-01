@@ -223,7 +223,7 @@ async function checkSession() {
   }
 
   await caricaAllenamentiMese();
-  showView("view-dashboard");
+  showView("view-list");
 }
 checkSession();
 
@@ -397,26 +397,42 @@ async function caricaAllenamenti(data) {
     const who = (a._full_name || "-");
     const canEdit = isAdmin || (currentUser && a.user_id === currentUser.id);
 
+    const durataTxt = a.durata ? (a.durata + " min") : "-";
+    const partecipantiTxt = (a.numero_partecipanti ?? a.num_partecipanti ?? "") || "-";
+    const trainerTxt = a.persone || "-";
+    const noteTxt = a.note || "-";
+
     listaDiv.innerHTML += `
-      <div class="table-row">
-        <div>📅 <strong>Data:</strong> ${formatDate(a.data)}</div>
-        <div>⏰ <strong>Ora:</strong> ${a.ora_inizio}</div>
-        <div>🏋️ <strong>Tipo:</strong> ${a.tipo}</div>
-        <div>🤝 <strong>Trainer:</strong> ${a.persone || "-"}</div>
-        <div>👥 <strong>Partecipanti:</strong> ${a.numero_partecipanti || "-"}</div>
-        <div>⏱ <strong>Durata:</strong> ${a.durata ? a.durata + " min" : "-"}</div>
-        ${isAdmin ? `<div>👤 <strong>Inserito da:</strong> ${who}</div>` : ""}
-        <div>📝 <strong>Note:</strong> ${a.note || "-"}</div>
+      <div class="workout-card">
+        <div class="workout-head">
+          <div>
+            <div class="workout-title">${a.tipo || "-"}</div>
+            <div class="workout-sub">
+              <span class="pill">📅 <strong>${formatDate(a.data)}</strong></span>
+              <span class="pill">🕒 <strong>${a.ora_inizio || "-"}</strong></span>
+              <span class="pill">⏱ <strong>${durataTxt}</strong></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="workout-grid">
+          <div class="kv"><span class="k">Partecipanti</span><span class="v">👥 ${partecipantiTxt}</span></div>
+          <div class="kv"><span class="k">Trainer / Con chi</span><span class="v">🤝 ${trainerTxt}</span></div>
+          ${isAdmin ? `<div class="kv"><span class="k">Inserito da</span><span class="v">👤 ${who}</span></div>` : ``}
+        </div>
+
+        <div class="workout-notes"><strong>📝 Note:</strong> ${noteTxt}</div>
 
         ${canEdit ? `
           <div class="actions">
             <button onclick="modificaAllenamento('${a.id}')">✏️ Modifica</button>
             <button onclick="eliminaAllenamento('${a.id}')" class="btn-secondary">🗑 Elimina</button>
           </div>
-        ` : ""}
+        ` : ``}
       </div>
     `;
   });
+
 }
 
 window.eliminaAllenamento = async function (id) {
