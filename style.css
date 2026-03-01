@@ -1,5 +1,7 @@
 /* ================= BASE ================= */
 :root{
+  --sophieColor:#2563eb;
+  --vivienneColor:#16a34a;
   --accent:#2563eb;
   --danger:#ef4444;
   --bg:#f6f6f6;
@@ -181,15 +183,15 @@ h3{ margin: 14px 0 10px; }
 
 /* Calendar color coding (match legend dots) */
 .calendar-day.workout-sophie{
-  background:#2563eb; /* Sophie */
+  background: var(--sophieColor); /* Sophie */
   color:#fff;
 }
 .calendar-day.workout-vivienne{
-  background:#16a34a; /* Vivienne */
+  background: var(--vivienneColor); /* Vivienne */
   color:#fff;
 }
 .calendar-day.workout-both{
-  background: linear-gradient(135deg, #2563eb 0 50%, #16a34a 50% 100%);
+  background: linear-gradient(135deg, var(--sophieColor) 0 50%, var(--vivienneColor) 50% 100%);
   color:#fff;
 }
 .hint{
@@ -297,7 +299,6 @@ h3{ margin: 14px 0 10px; }
 /* ================= EXPORT OPTIONS ================= */
 #exportOptions{
   background: var(--card);
-  margin-bottom: 18px;
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 14px;
@@ -361,9 +362,9 @@ h3{ margin: 14px 0 10px; }
   border: 1px solid rgba(0,0,0,.12);
 }
 
-.dot-sophie{ background:#2563eb; }
-.dot-vivienne{ background:#16a34a; }
-.dot-both{ background: linear-gradient(135deg, #2563eb 0 50%, #16a34a 50% 100%); }
+.dot-sophie{ background: var(--sophieColor); }
+.dot-vivienne{ background: var(--vivienneColor); }
+.dot-both{ background: linear-gradient(135deg, var(--sophieColor) 0 50%, var(--vivienneColor) 50% 100%); }
 
 /* ================= PROFILE ================= */
 .profile-head{
