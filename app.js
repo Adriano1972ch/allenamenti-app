@@ -137,7 +137,7 @@ async function ensureProfileRow(){
   const { data: existing, error } = await supabaseClient
     .from("profiles")
     .select("id")
-    .eq("id", userId)
+    .eq("id", currentUser.id)
     .maybeSingle();
   if (error) { console.warn("profiles read error", error); return; }
   if (!existing) {
@@ -151,12 +151,12 @@ async function ensureProfileRow(){
   }
 }
 
-async function fetchAvatarUrl(userId){
+async function fetchAvatarUrl(){
   if (!currentUser) return null;
   const { data, error } = await supabaseClient
     .from("profiles")
     .select("avatar_url")
-    .eq("id", userId)
+    .eq("id", currentUser.id)
     .maybeSingle();
   if (error) { console.warn("avatar_url read error", error); return null; }
   return data?.avatar_url || null;
@@ -167,7 +167,7 @@ async function saveAvatarUrl(url){
   const { error } = await supabaseClient
     .from("profiles")
     .update({ avatar_url: url })
-    .eq("id", userId);
+    .eq("id", currentUser.id);
   if (error) console.warn("avatar_url update error", error);
 }
 
@@ -186,47 +186,47 @@ async function uploadAvatarToStorage(file){
 
 
 
-function updateMiniAvatar(url, uid){
+function updateMiniAvatar(url){
   const el = document.getElementById("miniAvatar");
   if (!el) return;
   if (url){
     el.textContent = "";
-    el.style.backgroundImage = "url('" + withCacheBust(url, uid) + "')";
+    el.style.backgroundImage = "url('" + withCacheBust(url) + "')";
     el.classList.add("has-photo");
   } else {
     el.style.backgroundImage = "none";
     el.classList.remove("has-photo");
     el.textContent = "👤";
   
-    updateMiniAvatar(null, targetUserId);
+    updateMiniAvatar(null);
 }
 }
 
-function withCacheBust(url, uid){
+function withCacheBust(url){
   if (!url) return url;
-  const ts = localStorage.getItem(avatarKey("ts", uid)) || String(Date.now());
+  const ts = localStorage.getItem(avatarKey("ts")) || String(Date.now());
   const sep = url.includes("?") ? "&" : "?";
   return url + sep + "v=" + encodeURIComponent(ts);
 }
 
-function avatarKey(suffix, uid){
-  const id = uid || currentUser?.id || "anon";
-  return `profile_avatar_${id}_${suffix}`;
+function avatarKey(suffix){
+  const uid = currentUser?.id || "anon";
+  return `profile_avatar_${uid}_${suffix}`;
 }
 
 
 async function loadAvatarIntoUI(){
   const el = document.getElementById("profileAvatar");
   if (!el) return;
-  let url = await fetchAvatarUrl(targetUserId);
-  if (!url) url = localStorage.getItem(avatarKey("data", targetUserId)) || null; // fallback
+  let url = await fetchAvatarUrl();
+  if (!url) url = localStorage.getItem(avatarKey("data")) || null; // fallback
   if (url) {
     el.textContent = "";
     el.style.backgroundImage = "url('" + url + "')";
     el.classList.add("has-photo");
     el.classList.remove("no-photo");
   
-    updateMiniAvatar(url, targetUserId);
+    updateMiniAvatar(url);
 } else {
     el.style.backgroundImage = "none";
     el.classList.remove("has-photo");
@@ -255,7 +255,7 @@ function bindAvatarUpload(){
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = String(reader.result || "");
-      localStorage.setItem(avatarKey("data", targetUserId), dataUrl);
+      localStorage.setItem(avatarKey("data"), dataUrl);
       avatar.textContent = "";
       avatar.style.backgroundImage = "url('" + dataUrl + "')";
       avatar.classList.add("has-photo");
@@ -270,7 +270,7 @@ function bindAvatarUpload(){
         await ensureProfileRow();
         await saveAvatarUrl(publicUrl);
       
-        localStorage.setItem(avatarKey("ts", targetUserId), String(Date.now()));
+        localStorage.setItem(avatarKey("ts"), String(Date.now()));
 }
     } catch (e) {
       console.warn("Avatar upload error:", e);
@@ -394,9 +394,7 @@ document.getElementById("registerBtn").onclick = async () => {
 document.getElementById("logoutBtn").onclick = async () => {
   await supabaseClient.auth.signOut();
   currentUser = null; 
-    
-  try{ updateMiniAvatar(null, null); }catch(e){}
-initTrainerColors();
+    initTrainerColors();
 isAdmin = false; selectedUserId = "__all__";
   allenamentiMese = []; giornoSelezionato = null;
   clearEditingMode();
@@ -438,7 +436,6 @@ async function populateUserFilter() {
 
   userFilterSelect.onchange = async () => {
     selectedUserId = userFilterSelect.value || "__all__";
-    try { await loadAvatarIntoUI(); } catch(e) { console.warn(e); }
     giornoSelezionato = null;
     listaDiv.innerHTML = "";
     listaTitle.textContent = tr("list.workouts");
@@ -1302,11 +1299,4 @@ async function renderProfile(){
   // secondary logout
   const lb2 = document.getElementById("logoutBtn2");
   if (lb2) lb2.onclick = () => document.getElementById("logoutBtn")?.click();
-
-function getAvatarTargetUserId(){
-  // Se admin sta visualizzando un utente specifico, mostra la sua foto accanto al nome
-  if (isAdmin && selectedUserId && selectedUserId !== "__all__") return selectedUserId;
-  return currentUser?.id || null;
-}
-
 }
