@@ -187,10 +187,11 @@ function bindAvatarUpload(){
         await ensureProfileRow();
         await saveAvatarUrl(publicUrl);
       }
-    } catch (e) {
-      console.warn("Avatar upload error:", e);
-      alert("Errore caricamento foto. Verifica bucket/policy su Supabase.");
-    } finally {
+    catch (e) {
+  console.warn("Avatar upload error:", e);
+  const msg = e?.message || JSON.stringify(e);
+  alert("Upload avatar fallito: " + msg);
+}
       input.value = "";
     }
   };
