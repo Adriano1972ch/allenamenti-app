@@ -83,7 +83,7 @@ h3{ margin: 14px 0 10px; }
 
 /* ================= VIEWS ================= */
 .views{
-  padding-bottom: 84px; /* space for bottom nav */
+  padding-bottom: 140px; /* space for bottom nav + actions */
 }
 .view-title{
   margin-top: 8px;
@@ -297,6 +297,7 @@ h3{ margin: 14px 0 10px; }
 /* ================= EXPORT OPTIONS ================= */
 #exportOptions{
   background: var(--card);
+  margin-bottom: 18px;
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 14px;
