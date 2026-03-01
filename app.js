@@ -52,18 +52,59 @@ const navButtons = Array.from(document.querySelectorAll(".nav-item"));
 // ================= PROFILE UI (colors + avatar) =================
 const PROFILE_COLORS = ["#1d4ed8", "#2563eb", "#0ea5e9", "#06b6d4", "#14b8a6", "#16a34a", "#22c55e", "#84cc16", "#f59e0b", "#f97316", "#ef4444", "#e11d48", "#db2777", "#a855f7", "#7c3aed", "#6366f1", "#334155", "#475569", "#0f172a", "#9ca3af"];
 
-// Initialize accent color early
-initAccent();
+// init colori trainer (prima del login)
+initTrainerColors();
 
-function initAccent(){
-  const saved = localStorage.getItem("calendar_color") || PROFILE_COLORS[0];
-  document.documentElement.style.setProperty("--accent", saved);
+
+// ================= TRAINER COLORS (Option 1) =================
+// Ogni utente imposta SOLO il proprio colore (Sophie o Vivienne).
+// I colori sono salvati sul dispositivo (localStorage).
+
+const DEFAULT_SOPHIE = "#2563eb";
+const DEFAULT_VIVIENNE = "#16a34a";
+
+function getTrainerSlug(){
+  const s = String(currentUser?.user_metadata?.full_name || currentUser?.email || "").toLowerCase();
+  if (s.includes("vivienne")) return "vivienne";
+  if (s.includes("sophie")) return "sophie";
+  // fallback: se non riconosciamo il nome, trattiamo come "sophie"
+  return "sophie";
+}
+
+function initTrainerColors(){
+  const sophie = localStorage.getItem("sophie_color") || DEFAULT_SOPHIE;
+  const vivi = localStorage.getItem("vivienne_color") || DEFAULT_VIVIENNE;
+
+  document.documentElement.style.setProperty("--sophieColor", sophie);
+  document.documentElement.style.setProperty("--vivienneColor", vivi);
+
+  // accent = colore dell'utente loggato (se già loggato), altrimenti Sophie
+  const slug = getTrainerSlug();
+  const myColor = (slug === "vivienne") ? vivi : sophie;
+  document.documentElement.style.setProperty("--accent", myColor);
+}
+
+function setMyTrainerColor(col){
+  const slug = getTrainerSlug();
+  if (slug === "vivienne") {
+    localStorage.setItem("vivienne_color", col);
+    document.documentElement.style.setProperty("--vivienneColor", col);
+  } else {
+    localStorage.setItem("sophie_color", col);
+    document.documentElement.style.setProperty("--sophieColor", col);
+  }
+  document.documentElement.style.setProperty("--accent", col);
 }
 
 function mountColorPalette(){
   const wrap = document.getElementById("colorPalette");
   if (!wrap) return;
-  const saved = localStorage.getItem("calendar_color") || PROFILE_COLORS[0];
+
+  const slug = getTrainerSlug();
+  const saved = (slug === "vivienne")
+    ? (localStorage.getItem("vivienne_color") || DEFAULT_VIVIENNE)
+    : (localStorage.getItem("sophie_color") || DEFAULT_SOPHIE);
+
   wrap.innerHTML = "";
   PROFILE_COLORS.forEach((col) => {
     const btn = document.createElement("button");
@@ -73,11 +114,13 @@ function mountColorPalette(){
     btn.style.setProperty("--c", col);
     btn.setAttribute("aria-label", "Colore " + col);
     if (col === saved) btn.classList.add("active");
+
     btn.onclick = () => {
-      localStorage.setItem("calendar_color", col);
-      document.documentElement.style.setProperty("--accent", col);
+      setMyTrainerColor(col);
       wrap.querySelectorAll(".dotpick").forEach(b => b.classList.toggle("active", b.dataset.color === col));
+      // ricalcola gradiente "both" (solo CSS vars, quindi basta)
     };
+
     wrap.appendChild(btn);
   });
 }
@@ -187,11 +230,10 @@ function bindAvatarUpload(){
         await ensureProfileRow();
         await saveAvatarUrl(publicUrl);
       }
-    catch (e) {
-  console.warn("Avatar upload error:", e);
-  const msg = e?.message || JSON.stringify(e);
-  alert("Upload avatar fallito: " + msg);
-}
+    } catch (e) {
+      console.warn("Avatar upload error:", e);
+      alert("Upload avatar fallito. Verifica bucket \"avatars\" e policy Storage (403/404). Dettagli in console.");
+    } finally {
       input.value = "";
     }
   };
@@ -360,7 +402,9 @@ async function checkSession() {
   if (!session) { authDiv.style.display = "block"; appDiv.style.display = "none"; return; }
 
   currentUser = session.user;
-  isAdmin = await getIsAdmin();
+  
+      initTrainerColors();
+isAdmin = await getIsAdmin();
 
   authDiv.style.display = "none";
   appDiv.style.display = "block";
