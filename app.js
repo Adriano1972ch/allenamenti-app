@@ -5,16 +5,6 @@ const SUPABASE_URL = "https://sebcxlpyqehsbgyalzmz.supabase.co";
 const SUPABASE_KEY = "sb_publishable_8BwK3_2OGff5uaDRrdCfHQ_rNhUWCzE";
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-
-// ================= DEBUG (temporary) =================
-// Se qualcosa blocca la pagina (specialmente su smartphone), mostriamo l'errore.
-window.addEventListener("error", (e) => {
-  console.error("JS error:", e?.error || e?.message || e);
-});
-window.addEventListener("unhandledrejection", (e) => {
-  console.error("Unhandled promise:", e?.reason || e);
-});
-
 // ================= DOM =================
 const authDiv = document.getElementById("auth");
 const appDiv = document.getElementById("app");
@@ -63,15 +53,14 @@ const navButtons = Array.from(document.querySelectorAll(".nav-item"));
 const PROFILE_COLORS = ["#1d4ed8", "#2563eb", "#0ea5e9", "#06b6d4", "#14b8a6", "#16a34a", "#22c55e", "#84cc16", "#f59e0b", "#f97316", "#ef4444", "#e11d48", "#db2777", "#a855f7", "#7c3aed", "#6366f1", "#334155", "#475569", "#0f172a", "#9ca3af"];
 
 // init colori trainer (prima del login)
-initTrainerColors();
-
 
 // ================= TRAINER COLORS (Option 1) =================
-// Ogni utente imposta SOLO il proprio colore (Sophie o Vivienne).
-// I colori sono salvati sul dispositivo (localStorage).
 
 const DEFAULT_SOPHIE = "#2563eb";
 const DEFAULT_VIVIENNE = "#16a34a";
+// Ogni utente imposta SOLO il proprio colore (Sophie o Vivienne).
+// I colori sono salvati sul dispositivo (localStorage).
+
 
 function getTrainerSlug(){
   const s = String(currentUser?.user_metadata?.full_name || currentUser?.email || "").toLowerCase();
@@ -338,32 +327,12 @@ function clearEditingMode() {
 
 // ================= AUTH UI =================
 document.getElementById("loginBtn").onclick = async () => {
-  const btn = document.getElementById("loginBtn");
-  try {
-    if (!window.supabase || !supabaseClient) {
-      alert("Supabase non caricato. Controlla connessione / cache.");
-      return;
-    }
-    btn.disabled = true;
-    const old = btn.textContent;
-    btn.textContent = "Accesso…";
-    const { data, error } = await supabaseClient.auth.signInWithPassword({
-      email: (emailInput.value || "").trim(),
-      password: passwordInput.value || ""
-    });
-    if (error) {
-      console.error("login error:", error);
-      alert("Login fallito: " + (error.message || JSON.stringify(error)));
-      return;
-    }
-    await checkSession();
-  } catch (e) {
-    console.error("login exception:", e);
-    alert("Errore login: " + (e?.message || JSON.stringify(e)));
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "Login";
-  }
+  const { error } = await supabaseClient.auth.signInWithPassword({
+    email: emailInput.value,
+    password: passwordInput.value
+  });
+  if (error) alert(error.message);
+  else await checkSession();
 };
 
 document.getElementById("registerBtn").onclick = async () => {
@@ -432,8 +401,7 @@ async function checkSession() {
   if (!session) { authDiv.style.display = "block"; appDiv.style.display = "none"; return; }
 
   currentUser = session.user;
-  
-      initTrainerColors();
+
 isAdmin = await getIsAdmin();
 
   authDiv.style.display = "none";
