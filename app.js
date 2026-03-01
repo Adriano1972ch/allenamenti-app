@@ -694,10 +694,28 @@ async function doExportPdf() {
     const marginTop = 50;
     const marginBottom = 40;
 
-    const title = giornoSelezionato
-      ? `Report Allenamenti (${fromDate})`
-      : `Report Allenamenti (${monthLabel(currentMonth)})`;
-    const subtitle = `Periodo: ${fromDate} → ${toDate}`;
+    // Titolo/periodo coerenti con il range selezionato + formato europeo
+    const exportMode = giornoSelezionato ? "day" : getSelectedExportMode();
+
+    function parseISO(iso) {
+      const [yy, mm, dd] = String(iso).split("-").map(Number);
+      return new Date(yy, (mm || 1) - 1, dd || 1);
+    }
+    function monthLabelFromISO(iso) {
+      return parseISO(iso).toLocaleDateString(currentLang, { month: "long", year: "numeric" });
+    }
+
+    const title =
+      exportMode === "day"
+        ? `Report Allenamenti (${formatDate(fromDate)})`
+        : exportMode === "month"
+          ? `Report Allenamenti (${monthLabelFromISO(fromDate)})`
+          : `Report Allenamenti (${formatDate(fromDate)} – ${formatDate(toDate)})`;
+
+    const subtitle =
+      fromDate === toDate
+        ? `Data: ${formatDate(fromDate)}`
+        : `Periodo: ${formatDate(fromDate)} → ${formatDate(toDate)}`;
 
     const headers = [
       "Data",
