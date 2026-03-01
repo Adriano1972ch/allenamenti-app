@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <title data-i18n="app.title">Allenamenti</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <!-- PWA -->
@@ -18,11 +21,6 @@
 
   <!-- PDF -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-
-  <!-- Font -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
 
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -73,10 +71,6 @@
           <div class="card">
             <div class="card-title" data-i18n="dash.avgParticipants">Partecipanti medi</div>
             <div id="dashAvgParticipants" class="card-value">—</div>
-          </div>
-          <div class="profile-head-actions">
-            <button type="button" id="changeAvatarBtn" class="btn-secondary small-btn">Cambia foto</button>
-            <input type="file" id="avatarInput" accept="image/*" style="display:none" />
           </div>
         </div>
 
@@ -155,7 +149,7 @@
         <h2 class="view-title">Profilo</h2>
 
         <div class="profile-head card">
-          <div id="profileAvatar" class="profile-avatar" aria-label="Foto profilo"></div>
+          <div id="profileAvatar" class="profile-avatar no-photo" aria-label="Foto profilo">👤</div>
           <div class="profile-meta">
             <div id="profileName" class="profile-name">—</div>
             <div id="profileEmail" class="profile-sub">—</div>
@@ -163,19 +157,14 @@
               <span id="profileRole" class="badge badge-role">—</span>
             </div>
           </div>
+          <div class="profile-head-actions">
+            <button type="button" id="changeAvatarBtn" class="btn-secondary small-btn">Cambia foto</button>
+            <input type="file" id="avatarInput" accept="image/*" style="display:none" />
+          </div>
         </div>
 
         <div class="card">
           <div class="card-title">Preferenze</div>
-
-          <div class="pref-row">
-            <div class="pref-label">Tema</div>
-            <div class="segmented" role="group" aria-label="Tema">
-              <button type="button" class="seg-btn" data-theme-choice="light">Chiaro</button>
-              <button type="button" class="seg-btn" data-theme-choice="dark">Scuro</button>
-              <button type="button" class="seg-btn" data-theme-choice="system">Sistema</button>
-            </div>
-          </div>
 
           <div class="pref-row">
             <div class="pref-label">Colore calendario</div>
@@ -183,7 +172,7 @@
           </div>
 
           <p class="muted small" style="margin:10px 0 0">
-            (Solo estetica per ora: le preferenze vengono salvate sul dispositivo.)
+            Preferenze salvate sul dispositivo. Foto salvata online (Supabase) e visibile su tutti i dispositivi.
           </p>
         </div>
 
@@ -191,11 +180,11 @@
           <div class="card-title">Le mie statistiche</div>
           <div class="stats-grid">
             <div class="stat">
-              <div class="stat-k">Allenamenti (mese)</div>
+              <div class="stat-k">Sessioni mese</div>
               <div id="pStatSessions" class="stat-v">—</div>
             </div>
             <div class="stat">
-              <div class="stat-k">Ore totali (mese)</div>
+              <div class="stat-k">Ore totali</div>
               <div id="pStatHours" class="stat-v">—</div>
             </div>
             <div class="stat">
@@ -242,7 +231,6 @@
 </div>
 
     <nav class="bottom-nav">
-      <nav class="bottom-nav">
       <button class="nav-item" data-target="view-dashboard">🏠<span>Dashboard</span></button>
       <button class="nav-item" data-target="view-calendar">📅<span>Calendario</span></button>
       <button class="nav-item" data-target="view-list">📋<span>Lista</span></button>
