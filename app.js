@@ -54,6 +54,8 @@ const PROFILE_COLORS = ["#1d4ed8", "#2563eb", "#0ea5e9", "#06b6d4", "#14b8a6", "
 
 // init colori trainer (prima del login)
 
+const LAST_TRAINER_KEY = "last_trainer_slug";
+
 // ================= TRAINER COLORS (Option 1) =================
 
 const DEFAULT_SOPHIE = "#2563eb";
@@ -63,10 +65,16 @@ const DEFAULT_VIVIENNE = "#16a34a";
 
 
 function getTrainerSlug(){
+  // 1) se siamo loggati, deduciamo dal nome/email
   const s = String(currentUser?.user_metadata?.full_name || currentUser?.email || "").toLowerCase();
-  if (s.includes("vivienne")) return "vivienne";
-  if (s.includes("sophie")) return "sophie";
-  // fallback: se non riconosciamo il nome, trattiamo come "sophie"
+  if (s.includes("vivienne")) { localStorage.setItem(LAST_TRAINER_KEY, "vivienne"); return "vivienne"; }
+  if (s.includes("sophie")) { localStorage.setItem(LAST_TRAINER_KEY, "sophie"); return "sophie"; }
+
+  // 2) se non siamo loggati, manteniamo l'ultimo trainer usato
+  const last = localStorage.getItem(LAST_TRAINER_KEY);
+  if (last === "vivienne" || last === "sophie") return last;
+
+  // 3) fallback
   return "sophie";
 }
 
@@ -177,10 +185,26 @@ async function uploadAvatarToStorage(file){
 }
 
 
+
+function updateMiniAvatar(url){
+  const el = document.getElementById("miniAvatar");
+  if (!el) return;
+  if (url){
+    el.textContent = "";
+    el.style.backgroundImage = "url('" + withCacheBust(url) + "')";
+    el.classList.add("has-photo");
+  } else {
+    el.style.backgroundImage = "none";
+    el.classList.remove("has-photo");
+    el.textContent = "👤";
+  
+    updateMiniAvatar(null);
+}
+}
+
 function withCacheBust(url){
   if (!url) return url;
   const ts = localStorage.getItem("profile_avatar_ts") || String(Date.now());
-  // preserve existing query params
   const sep = url.includes("?") ? "&" : "?";
   return url + sep + "v=" + encodeURIComponent(ts);
 }
@@ -192,10 +216,12 @@ async function loadAvatarIntoUI(){
   if (!url) url = localStorage.getItem("profile_avatar") || null; // fallback
   if (url) {
     el.textContent = "";
-    el.style.backgroundImage = "url('" + withCacheBust(url) + "')";
+    el.style.backgroundImage = "url('" + url + "')";
     el.classList.add("has-photo");
     el.classList.remove("no-photo");
-  } else {
+  
+    updateMiniAvatar(url);
+} else {
     el.style.backgroundImage = "none";
     el.classList.remove("has-photo");
     el.classList.add("no-photo");
@@ -237,13 +263,12 @@ function bindAvatarUpload(){
       if (publicUrl) {
         await ensureProfileRow();
         await saveAvatarUrl(publicUrl);
+      
         localStorage.setItem("profile_avatar_ts", String(Date.now()));
-      }
-      // reload from DB (with cache-bust)
-      await loadAvatarIntoUI();
+}
     } catch (e) {
       console.warn("Avatar upload error:", e);
-      alert("Upload avatar fallito: " + (e?.message || JSON.stringify(e)));
+      alert("Upload avatar fallito. Verifica bucket \"avatars\" e policy Storage (403/404). Dettagli in console.");
     } finally {
       input.value = "";
     }
@@ -272,6 +297,8 @@ let allenamentiMese = [];
 let giornoSelezionato = null;
 
 let currentUser = null;
+
+    initTrainerColors();
 let isAdmin = false;
 
 let selectedUserId = "__all__"; // "__all__" = no filter
@@ -360,7 +387,9 @@ document.getElementById("registerBtn").onclick = async () => {
 
 document.getElementById("logoutBtn").onclick = async () => {
   await supabaseClient.auth.signOut();
-  currentUser = null; isAdmin = false; selectedUserId = "__all__";
+  currentUser = null; 
+    initTrainerColors();
+isAdmin = false; selectedUserId = "__all__";
   allenamentiMese = []; giornoSelezionato = null;
   clearEditingMode();
   listaDiv.innerHTML = ""; listaTitle.textContent = tr("list.workouts");
@@ -414,6 +443,8 @@ async function checkSession() {
 
   currentUser = session.user;
 
+
+      try{ await loadAvatarIntoUI(); }catch(e){ console.warn(e); }
 isAdmin = await getIsAdmin();
 
   authDiv.style.display = "none";
