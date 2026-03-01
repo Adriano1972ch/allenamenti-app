@@ -101,6 +101,11 @@ function setMyTrainerColor(col, opts = {}){
     document.documentElement.style.setProperty("--sophieColor", col);
   }
   document.documentElement.style.setProperty("--accent", col);
+
+  // Sync su Supabase (se loggati) salvo diversa indicazione
+  if (opts.persistRemote !== false && currentUser){
+    Promise.resolve(saveTrainerColor(col)).catch((e)=>console.warn("trainer_color update error", e));
+  }
 }
 
 function mountColorPalette(){
@@ -229,6 +234,7 @@ async function uploadAvatarToStorage(file){
 function updateMiniAvatar(url){
   const el = document.getElementById("miniAvatar");
   if (!el) return;
+
   if (url){
     el.textContent = "";
     el.style.backgroundImage = "url('" + withCacheBust(url) + "')";
@@ -237,9 +243,7 @@ function updateMiniAvatar(url){
     el.style.backgroundImage = "none";
     el.classList.remove("has-photo");
     el.textContent = "👤";
-  
-    updateMiniAvatar(null);
-}
+  }
 }
 
 function withCacheBust(url){
@@ -255,7 +259,7 @@ function avatarKey(suffix){
 }
 
 
-async async function loadAvatarIntoUI(){
+async function loadAvatarIntoUI(){
   const el = document.getElementById("profileAvatar");
   if (!el) return;
   let url = await fetchAvatarUrl();
