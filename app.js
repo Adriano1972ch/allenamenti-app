@@ -204,16 +204,22 @@ function updateMiniAvatar(url){
 
 function withCacheBust(url){
   if (!url) return url;
-  const ts = localStorage.getItem("profile_avatar_ts") || String(Date.now());
+  const ts = localStorage.getItem(avatarKey("ts")) || String(Date.now());
   const sep = url.includes("?") ? "&" : "?";
   return url + sep + "v=" + encodeURIComponent(ts);
 }
+
+function avatarKey(suffix){
+  const uid = currentUser?.id || "anon";
+  return `profile_avatar_${uid}_${suffix}`;
+}
+
 
 async function loadAvatarIntoUI(){
   const el = document.getElementById("profileAvatar");
   if (!el) return;
   let url = await fetchAvatarUrl();
-  if (!url) url = localStorage.getItem("profile_avatar") || null; // fallback
+  if (!url) url = localStorage.getItem(avatarKey("data")) || null; // fallback
   if (url) {
     el.textContent = "";
     el.style.backgroundImage = "url('" + url + "')";
@@ -249,7 +255,7 @@ function bindAvatarUpload(){
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = String(reader.result || "");
-      localStorage.setItem("profile_avatar", dataUrl);
+      localStorage.setItem(avatarKey("data"), dataUrl);
       avatar.textContent = "";
       avatar.style.backgroundImage = "url('" + dataUrl + "')";
       avatar.classList.add("has-photo");
@@ -264,7 +270,7 @@ function bindAvatarUpload(){
         await ensureProfileRow();
         await saveAvatarUrl(publicUrl);
       
-        localStorage.setItem("profile_avatar_ts", String(Date.now()));
+        localStorage.setItem(avatarKey("ts"), String(Date.now()));
 }
     } catch (e) {
       console.warn("Avatar upload error:", e);
