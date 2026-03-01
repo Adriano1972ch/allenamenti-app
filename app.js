@@ -813,9 +813,8 @@ async function doExportPdf() {
     if (!rows || rows.length === 0) return alert("Nessun dato da esportare");
 
     const { jsPDF } = window.jspdf;
-    const { jsPDF } = window.jspdf;
 
-const doc = new jsPDF({
+    const doc = new jsPDF({
   orientation: "landscape",
   unit: "pt",
   format: "a4"
