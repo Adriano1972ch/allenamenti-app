@@ -402,15 +402,11 @@ async function enrichWithProfiles(rows) {
   if (ids.length === 0) return rows || [];
   const { data: profs, error } = await supabaseClient
     .from("profiles")
-    .select("id, full_name, avatar_url")
+    .select("id, full_name")
     .in("id", ids);
   if (error) { console.error("Errore lettura profiles:", error); return rows || []; }
-  const map = new Map((profs || []).map(p => [p.id, p]));
-  return (rows || []).map(r => ({
-    ...r,
-    _full_name: map.get(r.user_id)?.full_name || null,
-    _avatar_url: map.get(r.user_id)?.avatar_url || null
-  }));
+  const map = new Map((profs || []).map(p => [p.id, p.full_name]));
+  return (rows || []).map(r => ({ ...r, _full_name: map.get(r.user_id) || null }));
 }
 
 function clearEditingMode() {
@@ -463,7 +459,7 @@ async function populateUserFilter() {
   if (!userFilterSelect) return;
   const { data, error } = await supabaseClient
     .from("profiles")
-    .select("id, full_name, avatar_url")
+    .select("id, full_name")
     .order("full_name", { ascending: true });
 
   if (error) {
@@ -487,6 +483,7 @@ async function populateUserFilter() {
     giornoSelezionato = null;
     listaDiv.innerHTML = "";
     listaTitle.textContent = tr("list.workouts");
+    await updateSelectedUserAvatar();
     await caricaAllenamentiMese();
   };
 }
@@ -519,7 +516,8 @@ isAdmin = await getIsAdmin();
     else { userFilterWrap.style.display = "none"; }
   }
 
-  await caricaAllenamentiMese();
+  await updateSelectedUserAvatar();
+    await caricaAllenamentiMese();
   showView("view-list");
 }
 checkSession();
@@ -573,6 +571,7 @@ form.onsubmit = async (e) => {
 
     clearEditingMode();
     form.reset();
+    await updateSelectedUserAvatar();
     await caricaAllenamentiMese();
     if (giornoSelezionato) await caricaAllenamenti(giornoSelezionato);
     alert("Allenamento aggiornato ✅");
@@ -588,7 +587,8 @@ form.onsubmit = async (e) => {
   }
 
   form.reset();
-  await caricaAllenamentiMese();
+  await updateSelectedUserAvatar();
+    await caricaAllenamentiMese();
   if (giornoSelezionato) await caricaAllenamenti(giornoSelezionato);
 };
 
@@ -702,18 +702,7 @@ async function caricaAllenamenti(data) {
         <div>🤝 <strong>Trainer:</strong> ${a.persone || "-"}</div>
         <div>👥 <strong>Partecipanti:</strong> ${a.numero_partecipanti || "-"}</div>
         <div>⏱ <strong>Durata:</strong> ${a.durata ? a.durata + " min" : "-"}</div>
-        ${isAdmin ? `
-      <div class="inserted-by">
-        ${
-          a._avatar_url
-            ? `<img class="inserted-avatar-img" src="${a._avatar_url}" alt="">`
-            : `<div class="inserted-avatar-placeholder">👤</div>`
-        }
-        <div>
-          <strong>Inserito da:</strong> ${who}
-        </div>
-      </div>
-    ` : ""}
+        ${isAdmin ? `<div>👤 <strong>Inserito da:</strong> ${who}</div>` : ""}
         <div>📝 <strong>Note:</strong> ${a.note || "-"}</div>
 
         ${canEdit ? `
@@ -741,7 +730,8 @@ window.eliminaAllenamento = async function (id) {
     return;
   }
 
-  await caricaAllenamentiMese();
+  await updateSelectedUserAvatar();
+    await caricaAllenamentiMese();
   if (giornoSelezionato) await caricaAllenamenti(giornoSelezionato);
 };
 
@@ -1362,4 +1352,29 @@ async function renderProfile(){
   // secondary logout
   const lb2 = document.getElementById("logoutBtn2");
   if (lb2) lb2.onclick = () => document.getElementById("logoutBtn")?.click();
+}
+
+
+async function updateSelectedUserAvatar(){
+  const el = document.getElementById("selectedUserAvatar");
+  if (!el) return;
+
+  if (!isAdmin || selectedUserId === "__all__"){
+    el.style.display = "none";
+    return;
+  }
+
+  const { data, error } = await supabaseClient
+    .from("profiles")
+    .select("avatar_url")
+    .eq("id", selectedUserId)
+    .maybeSingle();
+
+  if (error || !data?.avatar_url){
+    el.style.display = "none";
+    return;
+  }
+
+  el.style.backgroundImage = `url("${data.avatar_url}")`;
+  el.style.display = "block";
 }
