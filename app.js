@@ -483,7 +483,6 @@ async function populateUserFilter() {
     giornoSelezionato = null;
     listaDiv.innerHTML = "";
     listaTitle.textContent = tr("list.workouts");
-    await updateSelectedUserAvatar();
     await caricaAllenamentiMese();
   };
 }
@@ -516,8 +515,7 @@ isAdmin = await getIsAdmin();
     else { userFilterWrap.style.display = "none"; }
   }
 
-  await updateSelectedUserAvatar();
-    await caricaAllenamentiMese();
+  await caricaAllenamentiMese();
   showView("view-list");
 }
 checkSession();
@@ -571,7 +569,6 @@ form.onsubmit = async (e) => {
 
     clearEditingMode();
     form.reset();
-    await updateSelectedUserAvatar();
     await caricaAllenamentiMese();
     if (giornoSelezionato) await caricaAllenamenti(giornoSelezionato);
     alert("Allenamento aggiornato ✅");
@@ -587,8 +584,7 @@ form.onsubmit = async (e) => {
   }
 
   form.reset();
-  await updateSelectedUserAvatar();
-    await caricaAllenamentiMese();
+  await caricaAllenamentiMese();
   if (giornoSelezionato) await caricaAllenamenti(giornoSelezionato);
 };
 
@@ -730,8 +726,7 @@ window.eliminaAllenamento = async function (id) {
     return;
   }
 
-  await updateSelectedUserAvatar();
-    await caricaAllenamentiMese();
+  await caricaAllenamentiMese();
   if (giornoSelezionato) await caricaAllenamenti(giornoSelezionato);
 };
 
@@ -1352,29 +1347,4 @@ async function renderProfile(){
   // secondary logout
   const lb2 = document.getElementById("logoutBtn2");
   if (lb2) lb2.onclick = () => document.getElementById("logoutBtn")?.click();
-}
-
-
-async function updateSelectedUserAvatar(){
-  const el = document.getElementById("selectedUserAvatar");
-  if (!el) return;
-
-  if (!isAdmin || selectedUserId === "__all__"){
-    el.style.display = "none";
-    return;
-  }
-
-  const { data, error } = await supabaseClient
-    .from("profiles")
-    .select("avatar_url")
-    .eq("id", selectedUserId)
-    .maybeSingle();
-
-  if (error || !data?.avatar_url){
-    el.style.display = "none";
-    return;
-  }
-
-  el.style.backgroundImage = `url("${data.avatar_url}")`;
-  el.style.display = "block";
 }
