@@ -703,16 +703,17 @@ async function caricaAllenamenti(data) {
         <div>👥 <strong>Partecipanti:</strong> ${a.numero_partecipanti || "-"}</div>
         <div>⏱ <strong>Durata:</strong> ${a.durata ? a.durata + " min" : "-"}</div>
         ${isAdmin ? `
-        <div class="inserted-by">
-          <div class="inserted-avatar ${a._avatar_url ? "has-photo" : ""}"
-               style="${a._avatar_url ? `background-image:url('${a._avatar_url}')` : ""}">
-            ${!a._avatar_url ? "👤" : ""}
-          </div>
-          <div>
-            <strong>Inserito da:</strong> ${who}
-          </div>
+      <div class="inserted-by">
+        ${
+          a._avatar_url
+            ? `<img class="inserted-avatar-img" src="${a._avatar_url}" alt="">`
+            : `<div class="inserted-avatar-placeholder">👤</div>`
+        }
+        <div>
+          <strong>Inserito da:</strong> ${who}
         </div>
-      ` : ""}
+      </div>
+    ` : ""}
         <div>📝 <strong>Note:</strong> ${a.note || "-"}</div>
 
         ${canEdit ? `
