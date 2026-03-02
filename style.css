@@ -496,24 +496,3 @@ h3{ margin: 14px 0 10px; }
   user-select:none;
 }
 .mini-avatar.has-photo{ background-color: transparent; }
-
-
-/* ===== AVATAR UTENTE SELEZIONATO (ADMIN) ===== */
-
-.selected-user-avatar{
-  width:40px;
-  height:40px;
-  border-radius:999px;
-  background-size:cover;
-  background-position:center;
-  background-repeat:no-repeat;
-  border:1px solid var(--border);
-  margin-top:6px;
-}
-
-@media (max-width:520px){
-  .selected-user-avatar{
-    width:34px;
-    height:34px;
-  }
-}
