@@ -480,10 +480,10 @@ async function populateUserFilter() {
 
   userFilterSelect.onchange = async () => {
     selectedUserId = userFilterSelect.value || "__all__";
-    await updateSelectedUserAvatar();
     giornoSelezionato = null;
     listaDiv.innerHTML = "";
     listaTitle.textContent = tr("list.workouts");
+    await updateSelectedUserAvatar();
     await caricaAllenamentiMese();
   };
 }
@@ -516,7 +516,8 @@ isAdmin = await getIsAdmin();
     else { userFilterWrap.style.display = "none"; }
   }
 
-  await caricaAllenamentiMese();
+  await updateSelectedUserAvatar();
+    await caricaAllenamentiMese();
   showView("view-list");
 }
 checkSession();
@@ -570,6 +571,7 @@ form.onsubmit = async (e) => {
 
     clearEditingMode();
     form.reset();
+    await updateSelectedUserAvatar();
     await caricaAllenamentiMese();
     if (giornoSelezionato) await caricaAllenamenti(giornoSelezionato);
     alert("Allenamento aggiornato ✅");
@@ -585,7 +587,8 @@ form.onsubmit = async (e) => {
   }
 
   form.reset();
-  await caricaAllenamentiMese();
+  await updateSelectedUserAvatar();
+    await caricaAllenamentiMese();
   if (giornoSelezionato) await caricaAllenamenti(giornoSelezionato);
 };
 
@@ -727,7 +730,8 @@ window.eliminaAllenamento = async function (id) {
     return;
   }
 
-  await caricaAllenamentiMese();
+  await updateSelectedUserAvatar();
+    await caricaAllenamentiMese();
   if (giornoSelezionato) await caricaAllenamenti(giornoSelezionato);
 };
 
@@ -1364,7 +1368,7 @@ async function updateSelectedUserAvatar(){
     .from("profiles")
     .select("avatar_url")
     .eq("id", selectedUserId)
-    .single();
+    .maybeSingle();
 
   if (error || !data?.avatar_url){
     el.style.display = "none";
